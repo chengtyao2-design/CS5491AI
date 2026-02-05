@@ -14,9 +14,14 @@
 # ==============================================================================
 
 """Class for sampling new programs."""
+import os
 from collections.abc import Collection, Sequence
 
 import numpy as np
+from openai import OpenAI
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from funsearch.implementation import evaluator
 from funsearch.implementation import programs_database
@@ -27,10 +32,26 @@ class LLM:
 
   def __init__(self, samples_per_prompt: int) -> None:
     self._samples_per_prompt = samples_per_prompt
+    self.client = OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=os.getenv("OPENROUTER_API_KEY", "YOUR_OPENROUTER_API_KEY"),
+    )
+    self.total_tokens_used = 0
 
   def _draw_sample(self, prompt: str) -> str:
     """Returns a predicted continuation of `prompt`."""
-    raise NotImplementedError('Must provide a language model.')
+    model = os.getenv("LLM_MODEL", "minimax/minimax-m2.1")
+    resp = self.client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": "You are a senior software engineer. Write correct, idiomatic code to continue the user's prompt. Only output the code, no markdown, no explanation."},
+            {"role": "user", "content": prompt}
+        ],
+    )
+    if resp.usage:
+        self.total_tokens_used += resp.usage.total_tokens
+        print(f"[LLM Token Usage] Request: {resp.usage.total_tokens} | Total: {self.total_tokens_used}")
+    return resp.choices[0].message.content
 
   def draw_samples(self, prompt: str) -> Collection[str]:
     """Returns multiple predicted continuations of `prompt`."""
