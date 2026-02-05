@@ -44,13 +44,12 @@ class LLM:
     resp = self.client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": "You are a search algorithm engineer. Write concise, high-performance code. Output code only, no markdown."},
+            {"role": "system", "content": "You are a search algorithm engineer. Write concise, high-performance code. Output code only, no markdown. Important: Your response must start directly with the function body code. Do not include the function signature, docstring, or any introductory text. Just the implementation logic."},
             {"role": "user", "content": prompt}
         ],
     )
     if resp.usage:
         self.total_tokens_used += resp.usage.total_tokens
-        print(f"[LLM Token Usage] Request: {resp.usage.total_tokens} | Total: {self.total_tokens_used}")
     return resp.choices[0].message.content
 
   def draw_samples(self, prompt: str) -> Collection[str]:
@@ -66,14 +65,17 @@ class Sampler:
       database: programs_database.ProgramsDatabase,
       evaluators: Sequence[evaluator.Evaluator],
       samples_per_prompt: int,
+      max_iterations: int = -1,
   ) -> None:
     self._database = database
     self._evaluators = evaluators
     self._llm = LLM(samples_per_prompt)
+    self._max_iterations = max_iterations
 
   def sample(self):
     """Continuously gets prompts, samples programs, sends them for analysis."""
-    while True:
+    iteration = 0
+    while self._max_iterations == -1 or iteration < self._max_iterations:
       prompt = self._database.get_prompt()
       samples = self._llm.draw_samples(prompt.code)
       # This loop can be executed in parallel on remote evaluator machines.
@@ -81,3 +83,17 @@ class Sampler:
         chosen_evaluator = np.random.choice(self._evaluators)
         chosen_evaluator.analyse(
             sample, prompt.island_id, prompt.version_generated)
+      
+      iteration += 1
+      
+      best_score = self._database._best_score_per_island[prompt.island_id]
+      
+      # Calculate additional stats
+      num_islands = len(self._database._islands)
+      active_islands = sum(1 for score in self._database._best_score_per_island if score > -float('inf'))
+      global_best_score = max(self._database._best_score_per_island)
+      
+      print(f"Iteration: {iteration} | Total Tokens: {self._llm.total_tokens_used} | "
+            f"Best Score (Island {prompt.island_id}): {best_score} | "
+            f"Global Best: {global_best_score} | "
+            f"Active Islands: {active_islands}/{num_islands}")

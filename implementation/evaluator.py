@@ -18,6 +18,7 @@ import ast
 from collections.abc import Sequence
 import copy
 import multiprocessing
+import textwrap
 from typing import Any
 
 from implementation import code_manipulation
@@ -48,7 +49,17 @@ def _trim_function_body(generated_code: str) -> str:
   """Extracts the body of the generated function, trimming anything after it."""
   if not generated_code:
     return ''
-  code = f'def fake_function_header():\n{generated_code}'
+
+  # Ensure the code is indented for parsing
+  lines = generated_code.splitlines()
+  # Find first non-empty line to check indentation
+  first_line = next((line for line in lines if line.strip()), None)
+  if first_line and not first_line[0].isspace():
+      # If not indented, assume it's a raw body and indent it
+      code = f'def fake_function_header():\n' + textwrap.indent(generated_code, '  ')
+  else:
+      code = f'def fake_function_header():\n{generated_code}'
+
   tree = None
   # We keep trying and deleting code from the end until the parser succeeds.
   while tree is None:
@@ -63,7 +74,13 @@ def _trim_function_body(generated_code: str) -> str:
   visitor = _FunctionLineVisitor('fake_function_header')
   visitor.visit(tree)
   body_lines = code.splitlines()[1:visitor.function_end_line]
-  return '\n'.join(body_lines) + '\n\n'
+  
+  # Normalize indentation to 2 spaces
+  body = '\n'.join(body_lines)
+  body = textwrap.dedent(body)
+  body = textwrap.indent(body, '  ')
+  
+  return body + '\n\n'
 
 
 def _sample_to_program(
