@@ -40,11 +40,11 @@ class LLM:
 
   def _draw_sample(self, prompt: str) -> str:
     """Returns a predicted continuation of `prompt`."""
-    model = os.getenv("LLM_MODEL", "minimax/minimax-m2.1")
+    model = os.getenv("LLM_MODEL", "arcee-ai/trinity-large-preview:free")
     resp = self.client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": "You are a senior software engineer. Write correct, idiomatic code to continue the user's prompt. Only output the code, no markdown, no explanation."},
+            {"role": "system", "content": "You are a search algorithm engineer. Write concise, high-performance code. Output code only, no markdown."},
             {"role": "user", "content": prompt}
         ],
     )
