@@ -17,10 +17,11 @@
 import ast
 from collections.abc import Sequence
 import copy
+import multiprocessing
 from typing import Any
 
-from funsearch.implementation import code_manipulation
-from funsearch.implementation import programs_database
+from implementation import code_manipulation
+from implementation import programs_database
 
 
 class _FunctionLineVisitor(ast.NodeVisitor):
@@ -85,6 +86,27 @@ def _sample_to_program(
   return evolved_function, str(program)
 
 
+def _run_in_subprocess(program: str, function_name: str, test_input: Any, queue: multiprocessing.Queue):
+  """Executes the generated code in a subprocess."""
+  try:
+    # Use the same dictionary for globals and locals to ensure that functions
+    # defined in `program` can access imports defined in `program`.
+    local_scope = {}
+    # exec() executes the program in the local_scope.
+    exec(program, local_scope, local_scope)
+    if function_name not in local_scope:
+      queue.put((None, False))
+      return
+    func = local_scope[function_name]
+    result = func(test_input)
+    queue.put((result, True))
+  except Exception:  # pylint: disable=broad-except
+    # Print exception for debugging purposes
+    import traceback
+    traceback.print_exc()
+    queue.put((None, False))
+
+
 class Sandbox:
   """Sandbox for executing generated code."""
 
@@ -92,12 +114,26 @@ class Sandbox:
       self,
       program: str,
       function_to_run: str,
-      test_input: str,
+      test_input: Any,
       timeout_seconds: int,
   ) -> tuple[Any, bool]:
     """Returns `function_to_run(test_input)` and whether execution succeeded."""
-    raise NotImplementedError(
-        'Must provide a sandbox for executing untrusted code.')
+    queue = multiprocessing.Queue()
+    process = multiprocessing.Process(
+        target=_run_in_subprocess,
+        args=(program, function_to_run, test_input, queue),
+    )
+    process.start()
+    try:
+      result, success = queue.get(timeout=timeout_seconds)
+      process.join()
+      return result, success
+    except Exception:  # pylint: disable=broad-except
+      # If the process times out or fails for other reasons.
+      if process.is_alive():
+        process.terminate()
+        process.join()
+      return None, False
 
 
 def _calls_ancestor(program: str, function_to_evolve: str) -> bool:

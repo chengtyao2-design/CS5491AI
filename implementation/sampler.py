@@ -23,8 +23,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from funsearch.implementation import evaluator
-from funsearch.implementation import programs_database
+from implementation import evaluator
+from implementation import programs_database
 
 
 class LLM:
