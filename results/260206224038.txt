@@ -1,0 +1,35 @@
+FunSearch Log - Started at 260206224038
+Format: Iteration | Global Best | Total Tokens | Best Function Code
+
+1 | 308.5 | 1451 | Best Function:
+def priority(el: tuple[int, ...], n: int, w: int) -> float:
+  """Trivial scoring function.
+
+  Args:
+    el: an element to be potentially added to the current admissible set.
+    n: dimensionality of admissible set.
+    w: weight of admissible set.
+
+  Returns:
+    A number reflecting the priority with which we want to add `el` to the set.
+  """
+  return 0.0
+
+
+--------------------------------------------------------------------------------
+1 | 308.5 | 86242 | Best Function:
+def priority(el: tuple[int, ...], n: int, w: int) -> float:
+  """Trivial scoring function.
+
+  Args:
+    el: an element to be potentially added to the current admissible set.
+    n: dimensionality of admissible set.
+    w: weight of admissible set.
+
+  Returns:
+    A number reflecting the priority with which we want to add `el` to the set.
+  """
+  return 0.0
+
+
+--------------------------------------------------------------------------------

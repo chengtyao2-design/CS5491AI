@@ -13,16 +13,14 @@
 # limitations under the License.
 # ==============================================================================
 
-"""Class for sampling new programs."""
+"""The sampler class."""
 import os
 import time
-from collections.abc import Collection, Sequence
+from collections.abc import Sequence
 
+from absl import logging
 import numpy as np
 from openai import OpenAI
-from dotenv import load_dotenv
-
-load_dotenv()
 
 from implementation import evaluator
 from implementation import programs_database
@@ -30,8 +28,8 @@ from implementation import programs_database
 
 class LLM:
   """Language model that predicts continuation of provided source code."""
-
-  _total_tokens_used = 0  # Class variable to persist across instances
+  
+  _total_tokens_used = 0
 
   def __init__(self, samples_per_prompt: int) -> None:
     self._samples_per_prompt = samples_per_prompt
@@ -40,14 +38,10 @@ class LLM:
         api_key=os.getenv("OPENROUTER_API_KEY"),
     )
 
-  @property
-  def total_tokens_used(self):
-      return LLM._total_tokens_used
-
   def _draw_sample(self, prompt: str) -> str:
     """Returns a predicted continuation of `prompt`."""
     model = os.getenv("LLM_MODEL", "arcee-ai/trinity-large-preview:free")
-    user_prompt = f"Please provide the implementation for the function body of `priority` in the following code. The goal is to maximize the size of the admissible set. \n\n{prompt}"
+    user_prompt = f"You are designing a heuristic for a Greedy Algorithm to build a maximal Constant Weight Admissible Set (Cap Set).\n\nPlease provide the implementation for the function body of `priority` in the following code. The goal is to maximize the size of the admissible set. \n\n{prompt}"
     print(f"Prompt sent to LLM:\n---\n{prompt}\n---\n")
     
     retries = 5
@@ -56,7 +50,8 @@ class LLM:
             resp = self.client.chat.completions.create(
                 model=model,
                 messages=[
-                    {"role": "system", "content": "You are a search algorithm engineer. Your goal is to improve the computational logic of the function body. STRICTLY adhere to the function's signature and return type. DO NOT change the function's category or purpose. Write concise, high-performance code using branching structures or loops if necessary. Output code only, STRICTLY NO MARKDOWN and NO COMMENTS USING '#'. Your response should contain ONLY the function body code. Do not repeat the function signature or docstring."},
+                    # {"role": "system", "content": "You are a search algorithm engineer. Your goal is to improve the computational logic of the function body. Note that the functions are versioned as `_v0`, `_v1`, etc., where higher versions represent better-performing algorithms. Your task is to generate the next improved version based on the evolution history. STRICTLY adhere to the function's signature and return type. DO NOT change the function's category or purpose. Write concise, high-performance code using branching structures or loops if necessary. Output code only, STRICTLY NO MARKDOWN and NO COMMENTS USING '#'. Your response should contain ONLY the function body code. Do not repeat the function signature or docstring."},      # 未暴露优化问题
+                    {"role": "system", "content": "You are a mathematician and algorithm designer. Your goal is to design a scoring function `priority(el, n, w)` for a Greedy Algorithm that constructs a maximal **Constant Weight Admissible Set**.\n\n**Task Description:**\n- The Greedy Algorithm iteratively adds the candidate element `el` that maximizes your `priority` function.\n- Your goal is to design a heuristic that predicts which elements are 'best' to add early to allow the set to grow larger later.\n\n**Input Specs:**\n- `el`: A sparse vector of length `n` with weight `w` (entries are 0, 1, 2).\n\nSTRICTLY output only the function body code. NO markdown. NO comments."},
                     {"role": "user", "content": user_prompt}
                 ],
             )
@@ -70,62 +65,95 @@ class LLM:
             else:
                 print("Max retries reached. Stopping execution.")
                 raise e
+    return ""
 
-  def draw_samples(self, prompt: str) -> Collection[str]:
+  def draw_samples(self, prompt: str) -> Sequence[str]:
     """Returns multiple predicted continuations of `prompt`."""
     return [self._draw_sample(prompt) for _ in range(self._samples_per_prompt)]
+    
+  @property
+  def total_tokens_used(self) -> int:
+      return LLM._total_tokens_used
 
 
 class Sampler:
-  """Node that samples program continuations and sends them for analysis."""
+  """Node that samples programs."""
 
   def __init__(
       self,
       database: programs_database.ProgramsDatabase,
       evaluators: Sequence[evaluator.Evaluator],
       samples_per_prompt: int,
-      max_iterations: int = -1,
+      max_iterations: int,
+      log_file_path: str = None,
   ) -> None:
     self._database = database
     self._evaluators = evaluators
     self._llm = LLM(samples_per_prompt)
-    self._max_iterations = max_iterations
     self._start_time = time.time()
+    self._max_iterations = max_iterations
+    
+    self._log_file_path = log_file_path
+    self._last_global_best = -float('inf')
 
   def sample(self):
-    """Continuously gets prompts, samples programs, sends them for analysis."""
+    """Continuously samples programs."""
+    logging.info('Sampler started.')
     iteration = 0
-    while self._max_iterations == -1 or iteration < self._max_iterations:
-      prompt = self._database.get_prompt()
-      samples = self._llm.draw_samples(prompt.code)
+    while iteration < self._max_iterations:
+      prompt_code, version_generated, island_id = self._database.get_prompt()
+      samples = self._llm.draw_samples(prompt_code)
       # This loop can be executed in parallel on remote evaluator machines.
       for sample in samples:
         chosen_evaluator = np.random.choice(self._evaluators)
         chosen_evaluator.analyse(
-            sample, prompt.island_id, prompt.version_generated)
+            sample, island_id, version_generated)
       
       iteration += 1
       
-      best_score = self._database._best_score_per_island[prompt.island_id]
+      best_score = self._database._best_score_per_island[island_id]
       
       # Calculate additional stats
       num_islands = len(self._database._islands)
       active_islands = sum(1 for score in self._database._best_score_per_island if score > -float('inf'))
       global_best_score = max(self._database._best_score_per_island)
       
+      # Log to file if Global Best improved
+      if global_best_score > self._last_global_best:
+          self._last_global_best = global_best_score
+          # Find the program with the global best score
+          best_programs = self._database.get_best_programs_per_island()
+          best_program_code = ""
+          for program, score, _ in best_programs:
+              if score == global_best_score and program:
+                  best_program_code = str(program)
+                  break
+          
+          log_entry = (f"{iteration} | {global_best_score} | {self._llm.total_tokens_used} | "
+                       f"Best Function:\n{best_program_code}\n"
+                       f"{'-'*80}\n")
+          
+          with open(self._log_file_path, 'a') as f:
+              f.write(log_entry)
+          print(f"New Global Best! Logged to {self._log_file_path}")
+      
       elapsed_seconds = int(time.time() - self._start_time)
       
+      # Get current temperature of the island
+      current_temp = self._database._islands[island_id].get_current_temperature()
+
       print(f"Iteration: {iteration} | Total Tokens: {self._llm.total_tokens_used} | "
-            f"Best Score (Island {prompt.island_id}): {best_score} | "
+            f"Best Score (Island {island_id}): {best_score} | "
             f"Global Best: {global_best_score} | "
             f"Active Islands: {active_islands}/{num_islands} | "
             f"Elapsed: {elapsed_seconds}s | "
-            f"Resets: {self._database._reset_count}")
+            f"Resets: {self._database._reset_count} | "
+            f"Duplicates: {self._database._duplicate_count}")
 
       print("Cluster Stats:")
       for i, island in enumerate(self._database._islands):
           if not island._clusters:
               continue
-          print(f"  Island {i}: {len(island._clusters)} clusters")
+          print(f"  Island {i} (Temp: {island.get_current_temperature():.1f}): {len(island._clusters)} clusters")
           for sig, cluster in island._clusters.items():
               print(f"    Cluster {sig} (Score: {cluster.score}): {len(cluster._programs)} programs")

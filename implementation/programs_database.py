@@ -76,9 +76,9 @@ class Prompt:
 
 def _get_program_fingerprint(program: code_manipulation.Function) -> str:
   try:
-    return ast.dump(ast.parse(str(program)), include_attributes=False)
+    return ast.dump(ast.parse(program.body), include_attributes=False)
   except Exception:
-    return "".join(str(program).split())
+    return "".join(program.body.split())
 
 
 class ProgramsDatabase:
@@ -117,6 +117,9 @@ class ProgramsDatabase:
     self._backup_islands: list[Island] | None = None
     self._last_reset_time: float = time.time()
     self._reset_count: int = 0
+    # Global set to track all programs ever seen across all islands/resets
+    self._seen_fingerprints: set[str] = set()
+    self._duplicate_count: int = 0
 
   def get_best_programs_per_island(
       self) -> list[tuple[code_manipulation.Function | None, float,
@@ -128,10 +131,36 @@ class ProgramsDatabase:
   def register_program(
       self,
       program: code_manipulation.Function,
-      island_id: int,
+      island_id: int | None,
       scores_per_test: ScoresPerTest,
   ) -> None:
     """Registers `program` in the database."""
+    # Global deduplication: check if we've ever seen this code before
+    fingerprint = _get_program_fingerprint(program)
+    if fingerprint in self._seen_fingerprints:
+      self._duplicate_count += 1
+      logging.info(f"Duplicate program detected. Total duplicates: {self._duplicate_count}")
+      return
+    self._seen_fingerprints.add(fingerprint)
+
+    if island_id is None:
+      # This is the initial program, so we register it in all islands.
+      for i in range(len(self._islands)):
+        self._register_program_internal(program, i, scores_per_test)
+    else:
+      self._register_program_internal(program, island_id, scores_per_test)
+
+    # Reset islands if necessary.
+    if time.time() - self._last_reset_time > self._config.reset_period:
+      self._last_reset_time = time.time()
+      self.reset_islands()
+
+  def _register_program_internal(
+      self,
+      program: code_manipulation.Function,
+      island_id: int,
+      scores_per_test: ScoresPerTest,
+  ) -> None:
     # Record best score per island.
     score = _reduce_score(scores_per_test)
     if score > self._best_score_per_island[island_id]:
@@ -142,11 +171,6 @@ class ProgramsDatabase:
 
     # Register program in island.
     self._islands[island_id].register_program(program, scores_per_test)
-
-    # Reset islands if necessary.
-    if time.time() - self._last_reset_time > self._config.reset_period:
-      self._last_reset_time = time.time()
-      self.reset_islands()
 
   def reset_islands(self) -> None:
     """Resets the weaker half of islands."""
@@ -172,6 +196,10 @@ class ProgramsDatabase:
       self._best_score_per_island[island_id] = founder_best_score
       self._best_scores_per_test_per_island[
           island_id] = founder_best_scores_per_test
+
+  def get_current_temperature(self) -> float:
+      """Returns the temperature used in the last sampling."""
+      return getattr(self, '_current_temperature', self._cluster_sampling_temperature_init)
 
   def get_prompt(self) -> tuple[str, int]:
     """Returns a prompt for the sampler."""
@@ -217,6 +245,10 @@ class Island:
       self._clusters[signature].register_program(program)
     self._num_programs += 1
 
+  def get_current_temperature(self) -> float:
+      """Returns the temperature used in the last sampling."""
+      return getattr(self, '_current_temperature', self._cluster_sampling_temperature_init)
+
   def get_prompt(self) -> tuple[str, int]:
     """Constructs a prompt containing functions from this island."""
     signatures = list(self._clusters.keys())
@@ -227,14 +259,48 @@ class Island:
     period = self._cluster_sampling_temperature_period
     temperature = self._cluster_sampling_temperature_init * (
         1 - (self._num_programs % period) / period)
+
+    # Dynamic temperature adjustment:
+    self._current_temperature = temperature # Store base temperature
+    
+    cluster_sizes = [len(c._programs) for c in self._clusters.values()]
+    if len(cluster_sizes) > 1:
+      max_ratio = max(cluster_sizes) / sum(cluster_sizes)
+      min_possible_ratio = 1.0 / len(cluster_sizes)
+      
+      # Normalize concentration to [0, 1]
+      # 0 = Perfectly uniform (max_ratio == 1/N)
+      # 1 = Perfectly concentrated (max_ratio == 1.0)
+      concentration = (max_ratio - min_possible_ratio) / (1.0 - min_possible_ratio + 1e-6)
+      
+      # Use power function to keep temp low when concentration is low
+      # Temp = Base + (Max - Base) * concentration^2
+      # Example: N=3, sizes=[2,1,1], max_ratio=0.5, conc=0.25, conc^2=0.06
+      # Temp = 0.1 + 49.9 * 0.06 = 3.1
+      dynamic_temp = self._cluster_sampling_temperature_init + (50.0 - self._cluster_sampling_temperature_init) * (concentration ** 2)
+      
+      if dynamic_temp > temperature:
+          temperature = dynamic_temp
+          if concentration > 0.5: # Log only significant boosts (conc > 0.5)
+             logging.info(f'Cluster concentration {concentration:.1%}. Boosting temperature to {temperature:.1f}')
+
+    self._current_temperature = temperature # Update with boosted temperature
     probabilities = _softmax(cluster_scores, temperature)
 
     # At the beginning of an experiment when we have few clusters, place fewer
     # programs into the prompt.
     functions_per_prompt = min(len(self._clusters), self._functions_per_prompt) #**
 
+    # If we have enough clusters, sample without replacement to avoid duplicates.
+    replace = len(signatures) < functions_per_prompt
+    
+    # Safety check: numpy.random.choice with replace=False requires 
+    if not replace:
+        non_zero_p_count = np.count_nonzero(probabilities > 0)
+        if non_zero_p_count < functions_per_prompt:
+             replace = True
     idx = np.random.choice(
-        len(signatures), size=functions_per_prompt, p=probabilities)
+        len(signatures), size=functions_per_prompt, p=probabilities, replace=replace)
     chosen_signatures = [signatures[i] for i in idx]
     implementations = []
     scores = []

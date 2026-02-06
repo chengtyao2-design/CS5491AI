@@ -396,5 +396,12 @@ class Evaluator:
         if not isinstance(test_output, (int, float)):
           raise ValueError('@function.run did not return an int/float score.')
         scores_per_test[current_input] = test_output
+    
+    # Debug Logging: Score
+    if scores_per_test:
+        print(f"DEBUG: Program execution successful. Scores: {scores_per_test}")
+    else:
+        print("DEBUG: Program execution failed or produced no scores.")
+
     if scores_per_test:
       self._database.register_program(new_function, island_id, scores_per_test)

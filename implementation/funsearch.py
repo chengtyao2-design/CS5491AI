@@ -37,6 +37,9 @@ def _extract_function_names(specification: str) -> tuple[str, str]:
   return evolve_functions[0], run_functions[0]
 
 
+import os
+import time
+
 def main(specification: str, inputs: Sequence[Any], config: config_lib.Config):
   """Launches a FunSearch experiment."""
   function_to_evolve, function_to_run = _extract_function_names(specification)
@@ -58,7 +61,16 @@ def main(specification: str, inputs: Sequence[Any], config: config_lib.Config):
   initial = template.get_function(function_to_evolve).body
   evaluators[0].analyse(initial, island_id=None, version_generated=None)
 
-  samplers = [sampler.Sampler(database, evaluators, config.samples_per_prompt, config.iterations)
+  # Create results directory and log file once
+  results_dir = os.path.join(os.getcwd(), 'results')
+  os.makedirs(results_dir, exist_ok=True)
+  timestamp = time.strftime("%y%m%d%H%M%S")
+  log_file_path = os.path.join(results_dir, f"{timestamp}.txt")
+  with open(log_file_path, 'w') as f:
+      f.write(f"FunSearch Log - Started at {timestamp}\n")
+      f.write("Format: Iteration | Global Best | Total Tokens | Best Function Code\n\n")
+
+  samplers = [sampler.Sampler(database, evaluators, config.samples_per_prompt, config.iterations, log_file_path)
               for _ in range(config.num_samplers)]
 
   # This loop can be executed in parallel on remote sampler machines. As each
