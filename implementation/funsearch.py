@@ -17,11 +17,11 @@
 from collections.abc import Sequence
 from typing import Any
 
-from funsearch.implementation import code_manipulation
-from funsearch.implementation import config as config_lib
-from funsearch.implementation import evaluator
-from funsearch.implementation import programs_database
-from funsearch.implementation import sampler
+from implementation import code_manipulation
+from implementation import config as config_lib
+from implementation import evaluator
+from implementation import programs_database
+from implementation import sampler
 
 
 def _extract_function_names(specification: str) -> tuple[str, str]:
@@ -58,7 +58,7 @@ def main(specification: str, inputs: Sequence[Any], config: config_lib.Config):
   initial = template.get_function(function_to_evolve).body
   evaluators[0].analyse(initial, island_id=None, version_generated=None)
 
-  samplers = [sampler.Sampler(database, evaluators, config.samples_per_prompt)
+  samplers = [sampler.Sampler(database, evaluators, config.samples_per_prompt, config.iterations)
               for _ in range(config.num_samplers)]
 
   # This loop can be executed in parallel on remote sampler machines. As each

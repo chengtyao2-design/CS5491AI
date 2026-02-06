@@ -24,8 +24,8 @@ from absl import logging
 import numpy as np
 import scipy
 
-from funsearch.implementation import code_manipulation
-from funsearch.implementation import config as config_lib
+from implementation import code_manipulation
+from implementation import config as config_lib
 
 Signature = tuple[float, ...]
 ScoresPerTest = Mapping[Any, float]
@@ -216,7 +216,7 @@ class Island:
 
     # At the beginning of an experiment when we have few clusters, place fewer
     # programs into the prompt.
-    functions_per_prompt = min(len(self._clusters), self._functions_per_prompt)
+    functions_per_prompt = min(len(self._clusters), self._functions_per_prompt) #**
 
     idx = np.random.choice(
         len(signatures), size=functions_per_prompt, p=probabilities)
@@ -293,5 +293,6 @@ class Cluster:
     """Samples a program, giving higher probability to shorther programs."""
     normalized_lengths = (np.array(self._lengths) - min(self._lengths)) / (
         max(self._lengths) + 1e-6)
-    probabilities = _softmax(-normalized_lengths, temperature=1.0)
+    # Use higher temperature (e.g. 4.0) to reduce length penalty
+    probabilities = _softmax(-normalized_lengths, temperature=4.0)
     return np.random.choice(self._programs, p=probabilities)
