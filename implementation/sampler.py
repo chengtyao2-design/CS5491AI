@@ -30,13 +30,18 @@ from implementation import programs_database
 class LLM:
   """Language model that predicts continuation of provided source code."""
 
+  _total_tokens_used = 0  # Class variable to persist across instances
+
   def __init__(self, samples_per_prompt: int) -> None:
     self._samples_per_prompt = samples_per_prompt
     self.client = OpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=os.getenv("OPENROUTER_API_KEY"),
     )
-    self.total_tokens_used = 0
+
+  @property
+  def total_tokens_used(self):
+      return LLM._total_tokens_used
 
   def _draw_sample(self, prompt: str) -> str:
     """Returns a predicted continuation of `prompt`."""
@@ -51,13 +56,15 @@ class LLM:
         ],
     )
     if resp.usage:
-        self.total_tokens_used += resp.usage.total_tokens
+        LLM._total_tokens_used += resp.usage.total_tokens
     return resp.choices[0].message.content
 
   def draw_samples(self, prompt: str) -> Collection[str]:
     """Returns multiple predicted continuations of `prompt`."""
     return [self._draw_sample(prompt) for _ in range(self._samples_per_prompt)]
 
+
+import time
 
 class Sampler:
   """Node that samples program continuations and sends them for analysis."""
@@ -73,6 +80,7 @@ class Sampler:
     self._evaluators = evaluators
     self._llm = LLM(samples_per_prompt)
     self._max_iterations = max_iterations
+    self._start_time = time.time()
 
   def sample(self):
     """Continuously gets prompts, samples programs, sends them for analysis."""
@@ -95,10 +103,13 @@ class Sampler:
       active_islands = sum(1 for score in self._database._best_score_per_island if score > -float('inf'))
       global_best_score = max(self._database._best_score_per_island)
       
+      elapsed_seconds = int(time.time() - self._start_time)
+      
       print(f"Iteration: {iteration} | Total Tokens: {self._llm.total_tokens_used} | "
             f"Best Score (Island {prompt.island_id}): {best_score} | "
             f"Global Best: {global_best_score} | "
-            f"Active Islands: {active_islands}/{num_islands}")
+            f"Active Islands: {active_islands}/{num_islands} | "
+            f"Elapsed: {elapsed_seconds}s")
 
       print("Cluster Stats:")
       for i, island in enumerate(self._database._islands):
