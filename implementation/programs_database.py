@@ -48,7 +48,8 @@ def _softmax(logits: np.ndarray, temperature: float) -> np.ndarray:
 
 def _reduce_score(scores_per_test: ScoresPerTest) -> float:
   """Reduces per-test scores into a single score."""
-  return scores_per_test[list(scores_per_test.keys())[-1]]
+  # return scores_per_test[list(scores_per_test.keys())[-1]]
+  return sum(scores_per_test.values()) / len(scores_per_test)
 
 
 def _get_signature(scores_per_test: ScoresPerTest) -> Signature:
@@ -100,6 +101,7 @@ class ProgramsDatabase:
         [None] * config.num_islands)
 
     self._last_reset_time: float = time.time()
+    self._reset_count: int = 0
 
   def get_prompt(self) -> Prompt:
     """Returns a prompt containing implementations from one chosen island."""
@@ -146,6 +148,7 @@ class ProgramsDatabase:
 
   def reset_islands(self) -> None:
     """Resets the weaker half of islands."""
+    self._reset_count += 1
     # We sort best scores after adding minor noise to break ties.
     indices_sorted_by_score: np.ndarray = np.argsort(
         self._best_score_per_island +

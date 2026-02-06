@@ -109,7 +109,8 @@ class Sampler:
             f"Best Score (Island {prompt.island_id}): {best_score} | "
             f"Global Best: {global_best_score} | "
             f"Active Islands: {active_islands}/{num_islands} | "
-            f"Elapsed: {elapsed_seconds}s")
+            f"Elapsed: {elapsed_seconds}s | "
+            f"Resets: {self._database._reset_count}")
 
       print("Cluster Stats:")
       for i, island in enumerate(self._database._islands):
