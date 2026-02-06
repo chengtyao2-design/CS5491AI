@@ -150,7 +150,7 @@ class Sampler:
                   best_program_code = str(program)
                   break
           
-          log_entry = (f"{iteration} | {global_best_score} | {self._llm.total_tokens_used} | "
+          log_entry = (f"{iteration} | {global_best_score} | {self._llm.total_tokens_used} | {self._database._reset_count} | "
                        f"Best Function:\n{best_program_code}\n"
                        f"{'-'*80}\n")
           

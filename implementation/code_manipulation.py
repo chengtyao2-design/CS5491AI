@@ -48,7 +48,14 @@ class Function:
       # self.docstring is already indented on every line except the first one.
       # Here, we assume the indentation is always two spaces.
       new_line = '\n' if self.body else ''
-      function += f'  """{self.docstring}"""{new_line}'
+      # Check if docstring is already wrapped in quotes
+      doc = self.docstring.strip()
+      if doc.startswith('"""') and doc.endswith('"""'):
+          function += f'  {self.docstring}{new_line}'
+      elif doc.startswith("'''") and doc.endswith("'''"):
+          function += f'  {self.docstring}{new_line}'
+      else:
+          function += f'  """{self.docstring}"""{new_line}'
     # self.body is already indented.
     function += self.body + '\n\n'
     return function

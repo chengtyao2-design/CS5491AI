@@ -66,9 +66,14 @@ def main(specification: str, inputs: Sequence[Any], config: config_lib.Config):
   os.makedirs(results_dir, exist_ok=True)
   timestamp = time.strftime("%y%m%d%H%M%S")
   log_file_path = os.path.join(results_dir, f"{timestamp}.txt")
+  
+  # Get current LLM model
+  current_model = os.getenv("LLM_MODEL", "arcee-ai/trinity-large-preview:free")
+  
   with open(log_file_path, 'w') as f:
       f.write(f"FunSearch Log - Started at {timestamp}\n")
-      f.write("Format: Iteration | Global Best | Total Tokens | Best Function Code\n\n")
+      f.write(f"Model: {current_model}\n")
+      f.write("Format: Iteration | Global Best | Total Tokens | Resets | Best Function Code\n\n")
 
   samplers = [sampler.Sampler(database, evaluators, config.samples_per_prompt, config.iterations, log_file_path)
               for _ in range(config.num_samplers)]
