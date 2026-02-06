@@ -47,6 +47,7 @@ class LLM:
         f"Please provide {self._samples_per_prompt} DISTINCT and improved implementations for the function body of `priority` in the following code.\n\n"
         f"CRITICAL REQUIREMENT: The {self._samples_per_prompt} implementations must be FUNDAMENTALLY DIFFERENT from each other and use different mathematical strategies/heuristics to optimize the set size from different angles. Do not just change constants.\n"
         f"Possible angles to explore: preferring specific values, pattern avoidance, symmetry breaking, randomness, or hybrid approaches.\n\n"
+        f"IMPORTANT: The functions in the prompt are versioned (e.g., `_v0`, `_v1`, ...). Higher version numbers (larger `k` in `_vk`) generally indicate better performance. You should pay SPECIAL ATTENTION to the logic of the latest version (the one with the highest version number) and try to improve upon it.\n\n"
         f"The goal is to maximize the size of the admissible set. \n\n"
         f"Each implementation MUST be enclosed in a separate Python code block (```python ... ```).\n\n"
         f"{prompt}"

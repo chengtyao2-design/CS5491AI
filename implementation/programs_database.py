@@ -245,6 +245,26 @@ class Island:
       self._clusters[signature].register_program(program)
     self._num_programs += 1
 
+    # Pruning: If total programs on this island exceed threshold (15), remove weakest clusters
+    if self._num_programs >= 12:
+        # Sort clusters by score (ascending)
+        sorted_signatures = sorted(self._clusters.keys(), key=lambda sig: self._clusters[sig].score)
+        
+        # Implementation: Find worst cluster.
+        worst_sig = sorted_signatures[0]
+        worst_cluster = self._clusters[worst_sig]
+        
+        # If there are ties for the worst score
+        min_score = worst_cluster.score
+        tied_signatures = [sig for sig in sorted_signatures if self._clusters[sig].score == min_score]
+        
+        sig_to_remove = worst_sig
+        if len(tied_signatures) > 1:
+            sig_to_remove = tied_signatures[np.random.randint(len(tied_signatures))]
+        
+        removed_cluster = self._clusters.pop(sig_to_remove)
+        self._num_programs -= len(removed_cluster._programs)
+
   def get_current_temperature(self) -> float:
       """Returns the temperature used in the last sampling."""
       return getattr(self, '_current_temperature', self._cluster_sampling_temperature_init)
