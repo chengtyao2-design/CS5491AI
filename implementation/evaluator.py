@@ -253,6 +253,26 @@ def _trim_function_body(generated_code: str) -> str:
   # Normalize indentation to 2 spaces
   body = '\n'.join(body_lines)
   body = textwrap.dedent(body)
+  # Attempt to remove docstrings from the body
+  try:
+      dummy_code = f"def dummy():\n{textwrap.indent(body, '  ')}"
+      dummy_tree = ast.parse(dummy_code)
+      if dummy_tree.body and isinstance(dummy_tree.body[0], ast.FunctionDef):
+          func_body = dummy_tree.body[0].body
+          if func_body and isinstance(func_body[0], ast.Expr) and isinstance(func_body[0].value, ast.Constant):
+               if isinstance(func_body[0].value.value, str):
+                   print("DEBUG: Removing docstring from generated body.")
+                   # Remove the first statement (the docstring)
+                   # We need to find where the docstring ends in terms of lines
+                   doc_end_line = func_body[0].end_lineno
+                   
+                   lines_to_skip = doc_end_line - 1 # number of lines the docstring occupies
+                   body_lines_filtered = body.splitlines()[lines_to_skip:]
+                   body = '\n'.join(body_lines_filtered)
+                   body = textwrap.dedent(body) # Re-dedent just in case
+  except Exception as e:
+      print(f"DEBUG: Failed to remove docstring: {e}")
+
   body = textwrap.indent(body, '  ')
   
   return body + '\n\n'

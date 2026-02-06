@@ -16,6 +16,7 @@
 """The sampler class."""
 import os
 import time
+import re
 from collections.abc import Sequence
 
 from absl import logging
@@ -38,11 +39,19 @@ class LLM:
         api_key=os.getenv("OPENROUTER_API_KEY"),
     )
 
-  def _draw_sample(self, prompt: str) -> str:
-    """Returns a predicted continuation of `prompt`."""
+  def draw_samples(self, prompt: str) -> Sequence[str]:
+    """Returns multiple predicted continuations of `prompt`."""
     model = os.getenv("LLM_MODEL", "arcee-ai/trinity-large-preview:free")
-    user_prompt = f"You are designing a heuristic for a Greedy Algorithm to build a maximal Constant Weight Admissible Set (Cap Set).\n\nPlease provide the implementation for the function body of `priority` in the following code. The goal is to maximize the size of the admissible set. \n\n{prompt}"
-    print(f"Prompt sent to LLM:\n---\n{prompt}\n---\n")
+    user_prompt = (
+        f"You are designing a heuristic for a Greedy Algorithm to build a maximal Constant Weight Admissible Set (Cap Set).\n\n"
+        f"Please provide {self._samples_per_prompt} DISTINCT and improved implementations for the function body of `priority` in the following code.\n\n"
+        f"CRITICAL REQUIREMENT: The {self._samples_per_prompt} implementations must be FUNDAMENTALLY DIFFERENT from each other and use different mathematical strategies/heuristics to optimize the set size from different angles. Do not just change constants.\n"
+        f"Possible angles to explore: preferring specific values, pattern avoidance, symmetry breaking, randomness, or hybrid approaches.\n\n"
+        f"The goal is to maximize the size of the admissible set. \n\n"
+        f"Each implementation MUST be enclosed in a separate Python code block (```python ... ```).\n\n"
+        f"{prompt}"
+    )
+    print(f"Prompt sent to LLM (requesting {self._samples_per_prompt} samples):\n---\n{prompt}\n---\n")
     
     retries = 5
     for attempt in range(retries):
@@ -50,14 +59,30 @@ class LLM:
             resp = self.client.chat.completions.create(
                 model=model,
                 messages=[
-                    # {"role": "system", "content": "You are a search algorithm engineer. Your goal is to improve the computational logic of the function body. Note that the functions are versioned as `_v0`, `_v1`, etc., where higher versions represent better-performing algorithms. Your task is to generate the next improved version based on the evolution history. STRICTLY adhere to the function's signature and return type. DO NOT change the function's category or purpose. Write concise, high-performance code using branching structures or loops if necessary. Output code only, STRICTLY NO MARKDOWN and NO COMMENTS USING '#'. Your response should contain ONLY the function body code. Do not repeat the function signature or docstring."},      # 未暴露优化问题
-                    {"role": "system", "content": "You are a mathematician and algorithm designer. Your goal is to design a scoring function `priority(el, n, w)` for a Greedy Algorithm that constructs a maximal **Constant Weight Admissible Set**.\n\n**Task Description:**\n- The Greedy Algorithm iteratively adds the candidate element `el` that maximizes your `priority` function.\n- Your goal is to design a heuristic that predicts which elements are 'best' to add early to allow the set to grow larger later.\n\n**Input Specs:**\n- `el`: A sparse vector of length `n` with weight `w` (entries are 0, 1, 2).\n\nSTRICTLY output only the function body code. NO markdown. NO comments."},
+                    {"role": "system", "content": "You are a mathematician and algorithm designer. Your goal is to design a scoring function `priority(el, n, w)` for a Greedy Algorithm that constructs a maximal **Constant Weight Admissible Set**.\n\n**Task Description:**\n- The Greedy Algorithm iteratively adds the candidate element `el` that maximizes your `priority` function.\n- Your goal is to design a heuristic that predicts which elements are 'best' to add early to allow the set to grow larger later.\n\n**Input Specs:**\n- `el`: A sparse vector of length `n` with weight `w` (entries are 0, 1, 2).\n\nSTRICTLY output only the function body code. Each implementation in a separate markdown code block. NO comments outside code blocks."},
                     {"role": "user", "content": user_prompt}
                 ],
             )
             if resp.usage:
                 LLM._total_tokens_used += resp.usage.total_tokens
-            return resp.choices[0].message.content
+            
+            content = resp.choices[0].message.content
+            
+            # Parse multiple code blocks
+            samples = re.findall(r'```python\n(.*?)```', content, re.DOTALL)
+            if not samples:
+                samples = re.findall(r'```(.*?)```', content, re.DOTALL)
+            
+            clean_samples = [s.strip() for s in samples if s.strip()]
+            
+            # Fallback if no blocks found but content exists
+            if not clean_samples and content.strip():
+                 if 'return' in content:
+                     clean_samples = [content.strip()]
+
+            if clean_samples:
+                return clean_samples
+                
         except Exception as e:
             print(f"LLM API call failed (attempt {attempt+1}/{retries}): {e}")
             if attempt < retries - 1:
@@ -65,11 +90,7 @@ class LLM:
             else:
                 print("Max retries reached. Stopping execution.")
                 raise e
-    return ""
-
-  def draw_samples(self, prompt: str) -> Sequence[str]:
-    """Returns multiple predicted continuations of `prompt`."""
-    return [self._draw_sample(prompt) for _ in range(self._samples_per_prompt)]
+    return []
     
   @property
   def total_tokens_used(self) -> int:
