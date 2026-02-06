@@ -29,7 +29,7 @@ if __name__ == '__main__':
         
         # Define test inputs (n, w)
         # Example inputs: dimension n=12, weight w=7
-        test_inputs = [(12, 7)] 
+        test_inputs = [(8, 4), (12, 7)] 
 
         # Load default configuration
         default_config = config_lib.Config()

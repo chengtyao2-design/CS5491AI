@@ -94,10 +94,6 @@ def _trim_function_body(generated_code: str) -> str:
       # Check if it looks like a function definition
       if first_line.strip().startswith('def ') and ':' in first_line:
            print("DEBUG: Detected function signature in first line. Attempting to strip it.")
-           # If the code starts with 'def ...:', we treat everything inside as the body.
-           # We wrap it in a dummy class to parse it, or just parse directly.
-           # But if we want to extract the body for our template, we should remove this line 
-           # and dedent the rest.
            
            # Calculate indentation of the def
            def_indent = len(first_line) - len(first_line.lstrip())
@@ -119,10 +115,6 @@ def _trim_function_body(generated_code: str) -> str:
                            segment_str = '\n'.join(body_segment)
                            dedented = textwrap.dedent(segment_str)
                            print("DEBUG: Successfully extracted body from nested function.")
-                           # Recursive call to trim in case there are other artifacts? 
-                           # Or just return it (after wrapping for safety check below? No, just return).
-                           # But we need to ensure it's normalized.
-                           # Let's just update 'generated_code' to be the body and proceed to wrapping logic.
                            generated_code = dedented
                            lines = generated_code.splitlines()
                            first_line_idx = next((i for i, line in enumerate(lines) if line.strip()), None)
@@ -151,8 +143,6 @@ def _trim_function_body(generated_code: str) -> str:
                   normalized_lines.append(line.lstrip())
           generated_code = '\n'.join(normalized_lines)
 
-  # Now generated_code is normalized to start at 0 indentation
-  # We always indent it by 2 spaces to fit inside the fake function
   code = f'def fake_function_header():\n' + textwrap.indent(generated_code, '  ')
   
   print(f"DEBUG: Wrapped code for parsing:\n{code}")
@@ -170,7 +160,6 @@ def _trim_function_body(generated_code: str) -> str:
   tree = _attempt_parse(code)
   
   # Try 2: If failed, try to fix inconsistent indentation (replace 4 spaces with 2 spaces)
-  # Also handle "mixed" indentation by aggressive quantization
   if tree is None:
       print("DEBUG: Parse failed, attempting indentation fix...")
       
@@ -183,24 +172,6 @@ def _trim_function_body(generated_code: str) -> str:
               continue
               
           indent = len(line) - len(stripped)
-          
-          # Heuristic: If indent is 4, make it 2. If 8, make it 4. 
-          # But what if it is 2? Keep 2.
-          # If 3? Make it 2.
-          # Simple logic: divide by 2?
-          # User case: 0 -> 0. 4 -> 2. 2 -> 2? No, 2 should probably be 0 if 4 is 2?
-          # Wait, user case: `if n==0:` (indent 2 relative to def?), `return` (indent 4). `if n==1` (indent 2).
-          # Normalized code: `if n==0` (0). `return` (2 or 4). `if n==1` (0 or 2).
-          # If `return` was 4 spaces (relative to if), and `if` was 0.
-          # If user used 2 spaces for `if` and 4 for `return`.
-          # Then `if` (0) -> `return` (2).
-          # If user used 4 spaces for `if` and 8 for `return`.
-          # Then `if` (0) -> `return` (4).
-          
-          # Let's try standardizing to 2 spaces per level.
-          # Assume 1 level = 2 or 4 spaces.
-          # How to guess level?
-          # Just try to map 4->2.
           
           if indent > 0 and indent % 4 == 0:
               new_indent = indent // 2
@@ -329,9 +300,6 @@ def _run_in_subprocess(program: str, function_name: str, test_input: Any, queue:
              if result.size == 1:
                  result = result.item()
              else:
-                 # If it returns an array, maybe it's not the final score but intermediate
-                 # But function_to_run (evaluate) is expected to return int
-                 # Let's try to sum it if it's numeric, or take length if it's a set
                  try:
                     result = float(result)
                  except:
@@ -339,9 +307,6 @@ def _run_in_subprocess(program: str, function_name: str, test_input: Any, queue:
                     pass
     except ValueError as e:
       if "The truth value of an array" in str(e):
-         # This specific error usually happens inside the user code logic
-         # We can't easily fix user code logic from outside without modifying it
-         # But we can catch it to prevent crash
          print(f"Caught ValueError in user code: {e}")
          result = None
       else:
@@ -387,10 +352,6 @@ class Sandbox:
 def _calls_ancestor(program: str, function_to_evolve: str) -> bool:
   """Returns whether the generated function is calling an earlier version."""
   for name in code_manipulation.get_functions_called(program):
-    # In `program` passed into this function the most recently generated
-    # function has already been renamed to `function_to_evolve` (wihout the
-    # suffix). Therefore any function call starting with `function_to_evolve_v`
-    # is a call to an ancestor function.
     if name.startswith(f'{function_to_evolve}_v'):
       return True
   return False
