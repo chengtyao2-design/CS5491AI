@@ -1,0 +1,204 @@
+FunSearch Log - Started at 260207020412
+Model: arcee-ai/trinity-large-preview:free
+Format: Iteration | Global Best | Total Tokens | Resets | Best Function Code
+
+1 | 308.5 | 605 | 0 | Best Function:
+def priority(el: tuple[int, ...], n: int, w: int) -> float:
+  """Trivial scoring function.
+
+  Args:
+    el: an element to be potentially added to the current admissible set.
+    n: dimensionality of admissible set.
+    w: weight of admissible set.
+
+  Returns:
+    A number reflecting the priority with which we want to add `el` to the set.
+  """
+  return 0.0
+
+
+--------------------------------------------------------------------------------
+36 | 375.5 | 28427 | 6 | Best Function:
+def priority(el: tuple[int, ...], n: int, w: int) -> float:
+  """Trivial scoring function.
+
+  Args:
+    el: an element to be potentially added to the current admissible set.
+    n: dimensionality of admissible set.
+    w: weight of admissible set.
+
+  Returns:
+    A number reflecting the priority with which we want to add `el` to the set.
+  """
+  score = 0.0
+  for i in range(n // 2):
+    if el[i] != el[n - 1 - i]:
+      score += 1.0
+  return score
+
+
+--------------------------------------------------------------------------------
+1 | 375.5 | 41690 | 8 | Best Function:
+def priority(el: tuple[int, ...], n: int, w: int) -> float:
+  """Trivial scoring function.
+
+  Args:
+    el: an element to be potentially added to the current admissible set.
+    n: dimensionality of admissible set.
+    w: weight of admissible set.
+
+  Returns:
+    A number reflecting the priority with which we want to add `el` to the set.
+  """
+  score = 0.0
+  for i in range(n // 2):
+    if el[i] != el[n - 1 - i]:
+      score += 1.0
+  return score
+
+
+--------------------------------------------------------------------------------
+10 | 379.5 | 50190 | 10 | Best Function:
+def priority(el: tuple[int, ...], n: int, w: int) -> float:
+  """Trivial scoring function.
+
+  Args:
+    el: an element to be potentially added to the current admissible set.
+    n: dimensionality of admissible set.
+    w: weight of admissible set.
+
+  Returns:
+    A number reflecting the priority with which we want to add `el` to the set.
+  """
+  score = 0.0
+  for i in range(n // 2):
+      if el[i] != el[n - 1 - i]:
+          score += 1.0
+      else:
+          score -= 0.1
+  for i in range(n):
+      if el[i] == 1:
+          score += 0.5
+  return score
+
+
+--------------------------------------------------------------------------------
+22 | 384.5 | 63718 | 13 | Best Function:
+def priority(el: tuple[int, ...], n: int, w: int) -> float:
+  """Trivial scoring function.
+
+  Args:
+    el: an element to be potentially added to the current admissible set.
+    n: dimensionality of admissible set.
+    w: weight of admissible set.
+
+  Returns:
+    A number reflecting the priority with which we want to add `el` to the set.
+  """
+  score = 0.0
+  for i in range(n // 2):
+      if el[i] != el[n - 1 - i]:
+          score += 1.0
+      else:
+          score -= 0.1
+  for i in range(n):
+      if el[i] == 1:
+          score += 0.5
+      elif el[i] == 2:
+          score += 0.3
+  if sum(el) % 2 == 0:
+      score += 0.2
+  for i in range(n):
+      if el[i] == 0:
+          score += 0.1 * (n - i)
+  return score
+
+
+--------------------------------------------------------------------------------
+37 | 385.5 | 81857 | 16 | Best Function:
+def priority(el: tuple[int, ...], n: int, w: int) -> float:
+  """Trivial scoring function.
+
+  Args:
+    el: an element to be potentially added to the current admissible set.
+    n: dimensionality of admissible set.
+    w: weight of admissible set.
+
+  Returns:
+    A number reflecting the priority with which we want to add `el` to the set.
+  """
+  score = 0.0
+  for i in range(n):
+      if el[i] == 1:
+          score += 0.5
+      elif el[i] == 2:
+          score += 0.3
+      elif el[i] == 0:
+          score += 0.1 * (n - i)
+  for i in range(n // 2):
+      if el[i] != el[n - 1 - i]:
+          score += 1.0
+  if sum(el) % 2 == 0:
+      score += 0.2
+  return score
+
+
+--------------------------------------------------------------------------------
+1 | 385.5 | 102246 | 18 | Best Function:
+def priority(el: tuple[int, ...], n: int, w: int) -> float:
+  """Trivial scoring function.
+
+  Args:
+    el: an element to be potentially added to the current admissible set.
+    n: dimensionality of admissible set.
+    w: weight of admissible set.
+
+  Returns:
+    A number reflecting the priority with which we want to add `el` to the set.
+  """
+  score = 0.0
+  for i in range(n):
+      if el[i] == 1:
+          score += 0.5
+      elif el[i] == 2:
+          score += 0.3
+      elif el[i] == 0:
+          score += 0.1 * (n - i)
+  for i in range(n // 2):
+      if el[i] != el[n - 1 - i]:
+          score += 1.0
+  if sum(el) % 2 == 0:
+      score += 0.2
+  return score
+
+
+--------------------------------------------------------------------------------
+1 | 385.5 | 171491 | 29 | Best Function:
+def priority(el: tuple[int, ...], n: int, w: int) -> float:
+  """Trivial scoring function.
+
+  Args:
+    el: an element to be potentially added to the current admissible set.
+    n: dimensionality of admissible set.
+    w: weight of admissible set.
+
+  Returns:
+    A number reflecting the priority with which we want to add `el` to the set.
+  """
+  score = 0.0
+  for i in range(n):
+      if el[i] == 1:
+          score += 0.5
+      elif el[i] == 2:
+          score += 0.3
+      elif el[i] == 0:
+          score += 0.1 * (n - i)
+  for i in range(n // 2):
+      if el[i] != el[n - 1 - i]:
+          score += 1.0
+  if sum(el) % 2 == 0:
+      score += 0.2
+  return score
+
+
+--------------------------------------------------------------------------------

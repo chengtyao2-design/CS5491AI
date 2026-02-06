@@ -39,26 +39,40 @@ class LLM:
         api_key=os.getenv("OPENROUTER_API_KEY"),
     )
 
-  def draw_samples(self, prompt: str) -> Sequence[str]:
-    """Returns multiple predicted continuations of `prompt`."""
+  def draw_samples(self, prompt: str, temperature: float) -> tuple[Sequence[str], int]:
+    """Returns multiple predicted continuations of `prompt` and the duplicate count."""
     model = os.getenv("LLM_MODEL", "arcee-ai/trinity-large-preview:free")
+    
+    # Conditional Constraint: Only added when temperature is high (system is stuck/repetitive)
+    force_change_prompt = ""
+    if temperature >= 0.9:
+        force_change_prompt = (
+            f"Constraint 4 (High Temperature Override): You are currently stuck in a local optimum. "
+            f"You MUST drastically change the scoring logic. Do NOT use the same `if/else` structure as the previous version. "
+            f"Invent a completely NEW formula for the priority score.\n"
+        )
+
     user_prompt = (
         f"You are designing a heuristic for a Greedy Algorithm to build a maximal Constant Weight Admissible Set (Cap Set).\n\n"
         f"Please provide {self._samples_per_prompt} DISTINCT and improved implementations for the function body of `priority` in the following code.\n\n"
         f"CRITICAL REQUIREMENT: The {self._samples_per_prompt} implementations must be FUNDAMENTALLY DIFFERENT from each other and use different mathematical strategies/heuristics to optimize the set size from different angles. Do not just change constants.\n"
         f"Possible angles to explore: preferring specific values, pattern avoidance, symmetry breaking, randomness, or hybrid approaches.\n\n"
-        f"IMPORTANT: The functions in the prompt are versioned (e.g., `_v0`, `_v1`, ...). Higher version numbers (larger `k` in `_vk`) generally indicate better performance. You should pay SPECIAL ATTENTION to the logic of the latest version (the one with the highest version number) and try to improve upon it.\n\n"
-        f"The goal is to maximize the size of the admissible set. \n\n"
+        f"IMPORTANT: The functions in the prompt are versioned (e.g., `_v0`, `_v1`, ...). Higher version numbers (larger `k` in `_vk`) generally indicate better performance. You should pay SPECIAL ATTENTION to the logic of the latest version and try to improve upon it. \n"
+        f"Constraint 1: The {self._samples_per_prompt} improved versions you generate MUST use completely different algorithmic logic from each other. They should be diverse approaches to solving the problem, not variations of the same idea.\n"
+        f"Constraint 2: Do NOT generate a sequence of incremental improvements (v2 -> v3 -> v4). Instead, generate {self._samples_per_prompt} INDEPENDENT alternatives. Each alternative must be derived directly from the prompt's context, ignoring other alternatives generated in this response.\n"
+        f"Constraint 3: Do NOT use version numbers in function names (e.g., NO `priority_v2`, `priority_v3`). Use distinct names or just `priority`.\n"
+        f"{force_change_prompt}"
         f"Each implementation MUST be enclosed in a separate Python code block (```python ... ```).\n\n"
         f"{prompt}"
     )
-    print(f"Prompt sent to LLM (requesting {self._samples_per_prompt} samples):\n---\n{prompt}\n---\n")
+    print(f"Prompt sent to LLM (requesting {self._samples_per_prompt} samples, Temp: {temperature:.2f}):\n---\n{prompt}\n---\n")
     
     retries = 5
     for attempt in range(retries):
         try:
             resp = self.client.chat.completions.create(
                 model=model,
+                temperature=temperature,
                 messages=[
                     {"role": "system", "content": "You are a mathematician and algorithm designer. Your goal is to design a scoring function `priority(el, n, w)` for a Greedy Algorithm that constructs a maximal **Constant Weight Admissible Set**.\n\n**Task Description:**\n- The Greedy Algorithm iteratively adds the candidate element `el` that maximizes your `priority` function.\n- Your goal is to design a heuristic that predicts which elements are 'best' to add early to allow the set to grow larger later.\n\n**Input Specs:**\n- `el`: A sparse vector of length `n` with weight `w` (entries are 0, 1, 2).\n\nSTRICTLY output only the function body code. Each implementation in a separate markdown code block. NO comments outside code blocks."},
                     {"role": "user", "content": user_prompt}
@@ -76,13 +90,36 @@ class LLM:
             
             clean_samples = [s.strip() for s in samples if s.strip()]
             
+            # Robust Deduplication
+            unique_samples = []
+            seen_fingerprints = set()
+            for sample in clean_samples:
+                # 1. Remove docstrings
+                content_no_doc = re.sub(r'""".*?"""', '', sample, flags=re.DOTALL)
+                content_no_doc = re.sub(r"'''.*?'''", '', content_no_doc, flags=re.DOTALL)
+                
+                # 2. Remove function headers/decorators to compare body only
+                lines = [line for line in content_no_doc.splitlines() 
+                         if not line.strip().startswith(('def ', '@'))]
+                body_content = '\n'.join(lines)
+
+                # 3. Normalize whitespace (collapse all whitespace to single space)
+                fingerprint = re.sub(r'\s+', ' ', body_content).strip()
+                
+                if fingerprint and fingerprint not in seen_fingerprints:
+                    seen_fingerprints.add(fingerprint)
+                    unique_samples.append(sample)
+            
+            duplicate_count = len(clean_samples) - len(unique_samples)
+            clean_samples = unique_samples
+            
             # Fallback if no blocks found but content exists
             if not clean_samples and content.strip():
                  if 'return' in content:
                      clean_samples = [content.strip()]
 
             if clean_samples:
-                return clean_samples
+                return clean_samples, duplicate_count
                 
         except Exception as e:
             print(f"LLM API call failed (attempt {attempt+1}/{retries}): {e}")
@@ -91,7 +128,7 @@ class LLM:
             else:
                 print("Max retries reached. Stopping execution.")
                 raise e
-    return []
+    return [], 0
     
   @property
   def total_tokens_used(self) -> int:
@@ -117,6 +154,7 @@ class Sampler:
     
     self._log_file_path = log_file_path
     self._last_global_best = -float('inf')
+    self._llm_temperature = 0.6
 
   def sample(self):
     """Continuously samples programs."""
@@ -124,7 +162,16 @@ class Sampler:
     iteration = 0
     while iteration < self._max_iterations:
       prompt_code, version_generated, island_id = self._database.get_prompt()
-      samples = self._llm.draw_samples(prompt_code)
+      samples, num_duplicates = self._llm.draw_samples(prompt_code, self._llm_temperature)
+      
+      # Dynamic Temperature Adjustment
+      if num_duplicates > 0:
+          # If we see duplicates, increase temperature to encourage diversity
+          self._llm_temperature = min(1.0, self._llm_temperature + 0.05)
+      else:
+          # If no duplicates, slowly cool down to exploit
+          self._llm_temperature = max(0.6, self._llm_temperature - 0.01)
+
       # This loop can be executed in parallel on remote evaluator machines.
       for sample in samples:
         chosen_evaluator = np.random.choice(self._evaluators)
@@ -170,7 +217,9 @@ class Sampler:
             f"Active Islands: {active_islands}/{num_islands} | "
             f"Elapsed: {elapsed_seconds}s | "
             f"Resets: {self._database._reset_count} | "
-            f"Duplicates: {self._database._duplicate_count}")
+            f"LLM Temp: {self._llm_temperature:.2f} | "
+            f"LLM Dups: {num_duplicates} | "
+            f"DB Dups: {self._database._duplicate_count}")
 
       print("Cluster Stats:")
       for i, island in enumerate(self._database._islands):

@@ -245,25 +245,47 @@ class Island:
       self._clusters[signature].register_program(program)
     self._num_programs += 1
 
-    # Pruning: If total programs on this island exceed threshold (15), remove weakest clusters
-    if self._num_programs >= 12:
-        # Sort clusters by score (ascending)
-        sorted_signatures = sorted(self._clusters.keys(), key=lambda sig: self._clusters[sig].score)
+    # Pruning: If total programs on this island exceed threshold, trigger evolutionary culling
+    if self._num_programs > 12:
+        programs_to_remove = 0
         
-        # Implementation: Find worst cluster.
-        worst_sig = sorted_signatures[0]
-        worst_cluster = self._clusters[worst_sig]
-        
-        # If there are ties for the worst score
-        min_score = worst_cluster.score
-        tied_signatures = [sig for sig in sorted_signatures if self._clusters[sig].score == min_score]
-        
-        sig_to_remove = worst_sig
-        if len(tied_signatures) > 1:
-            sig_to_remove = tied_signatures[np.random.randint(len(tied_signatures))]
-        
-        removed_cluster = self._clusters.pop(sig_to_remove)
-        self._num_programs -= len(removed_cluster._programs)
+        # Zone 1 (13-16): Growth Phase (Add N, Delete 1)
+        if self._num_programs <= 16:
+            if np.random.random() < 0.25:
+                programs_to_remove = 1
+                
+        # Zone 2 (>16): Overpopulation Phase (Add 1, Delete 2)
+        else:
+            programs_to_remove = 2
+            
+        for _ in range(programs_to_remove):
+            if not self._clusters:
+                break
+                
+            # Sort clusters by score (ascending)
+            sorted_signatures = sorted(self._clusters.keys(), key=lambda sig: self._clusters[sig].score)
+            
+            # Soft Pruning: Randomly select from the bottom 2 clusters to remove FROM.
+            # This prevents instant extinction of new, exploring clusters.
+            candidates_count = min(len(sorted_signatures), 2)
+            worst_sig = sorted_signatures[np.random.randint(candidates_count)]
+            worst_cluster = self._clusters[worst_sig]
+            
+            # If there are ties for the worst score (only if we picked the absolute worst)
+            if candidates_count == 1: # Only check ties if we are forced to pick the single worst
+                min_score = worst_cluster.score
+                tied_signatures = [sig for sig in sorted_signatures if self._clusters[sig].score == min_score]
+                
+                if len(tied_signatures) > 1:
+                    worst_sig = tied_signatures[np.random.randint(len(tied_signatures))]
+                    worst_cluster = self._clusters[worst_sig]        
+            # ACTION: Remove ONE program from this cluster (not the whole cluster)
+            worst_cluster.pop_random_program()
+            self._num_programs -= 1
+            
+            # Only remove the cluster if it becomes empty
+            if not worst_cluster._programs:
+                del self._clusters[worst_sig]
 
   def get_current_temperature(self) -> float:
       """Returns the temperature used in the last sampling."""
@@ -294,10 +316,8 @@ class Island:
       concentration = (max_ratio - min_possible_ratio) / (1.0 - min_possible_ratio + 1e-6)
       
       # Use power function to keep temp low when concentration is low
-      # Temp = Base + (Max - Base) * concentration^2
-      # Example: N=3, sizes=[2,1,1], max_ratio=0.5, conc=0.25, conc^2=0.06
-      # Temp = 0.1 + 49.9 * 0.06 = 3.1
-      dynamic_temp = self._cluster_sampling_temperature_init + (50.0 - self._cluster_sampling_temperature_init) * (concentration ** 2)
+      # Temp = Base + (Max - Base) * concentration
+      dynamic_temp = self._cluster_sampling_temperature_init + (50.0 - self._cluster_sampling_temperature_init) * concentration
       
       if dynamic_temp > temperature:
           temperature = dynamic_temp
@@ -312,13 +332,8 @@ class Island:
     functions_per_prompt = min(len(self._clusters), self._functions_per_prompt) #**
 
     # If we have enough clusters, sample without replacement to avoid duplicates.
-    replace = len(signatures) < functions_per_prompt
+    replace = True # Always sample with replacement as requested
     
-    # Safety check: numpy.random.choice with replace=False requires 
-    if not replace:
-        non_zero_p_count = np.count_nonzero(probabilities > 0)
-        if non_zero_p_count < functions_per_prompt:
-             replace = True
     idx = np.random.choice(
         len(signatures), size=functions_per_prompt, p=probabilities, replace=replace)
     chosen_signatures = [signatures[i] for i in idx]
@@ -397,6 +412,16 @@ class Cluster:
     self._programs.append(program)
     self._lengths.append(len(str(program)))
     self._program_fingerprints.add(fingerprint)
+
+  def pop_random_program(self) -> None:
+    """Removes a random program from the cluster."""
+    if not self._programs:
+        return
+    idx = np.random.randint(len(self._programs))
+    program = self._programs.pop(idx)
+    self._lengths.pop(idx)
+    # Note: We don't remove from _program_fingerprints to allow re-discovery
+    # and to keep operations simple/fast.
 
   def sample_program(self) -> code_manipulation.Function:
     """Samples a program, giving higher probability to shorther programs."""
