@@ -216,7 +216,7 @@ class Island:
 
     # At the beginning of an experiment when we have few clusters, place fewer
     # programs into the prompt.
-    functions_per_prompt = min(self._num_programs, self._functions_per_prompt) #**
+    functions_per_prompt = min(len(self._clusters), self._functions_per_prompt) #**
 
     idx = np.random.choice(
         len(signatures), size=functions_per_prompt, p=probabilities)
