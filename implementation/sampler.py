@@ -68,8 +68,8 @@ class LLM:
             if attempt < retries - 1:
                 time.sleep(2)
             else:
-                print("Max retries reached. Returning empty sample.")
-                return ""
+                print("Max retries reached. Stopping execution.")
+                raise e
 
   def draw_samples(self, prompt: str) -> Collection[str]:
     """Returns multiple predicted continuations of `prompt`."""
