@@ -14,6 +14,7 @@
 # ==============================================================================
 
 """A programs database that implements the evolutionary algorithm."""
+import ast
 from collections.abc import Mapping, Sequence
 import copy
 import dataclasses
@@ -73,6 +74,13 @@ class Prompt:
   island_id: int
 
 
+def _get_program_fingerprint(program: code_manipulation.Function) -> str:
+  try:
+    return ast.dump(ast.parse(str(program)), include_attributes=False)
+  except Exception:
+    return "".join(str(program).split())
+
+
 class ProgramsDatabase:
   """A collection of programs, organized as islands."""
 
@@ -100,78 +108,81 @@ class ProgramsDatabase:
     self._best_scores_per_test_per_island: list[ScoresPerTest | None] = (
         [None] * config.num_islands)
 
+    self._functions_per_prompt: int = config.functions_per_prompt
+    self._cluster_sampling_temperature_init: float = (
+        config.cluster_sampling_temperature_init)
+    self._cluster_sampling_temperature_period: int = (
+        config.cluster_sampling_temperature_period)
+
+    self._backup_islands: list[Island] | None = None
     self._last_reset_time: float = time.time()
     self._reset_count: int = 0
 
-  def get_prompt(self) -> Prompt:
-    """Returns a prompt containing implementations from one chosen island."""
-    island_id = np.random.randint(len(self._islands))
-    code, version_generated = self._islands[island_id].get_prompt()
-    return Prompt(code, version_generated, island_id)
+  def get_best_programs_per_island(
+      self) -> list[tuple[code_manipulation.Function | None, float,
+                          ScoresPerTest | None]]:
+    return list(
+        zip(self._best_program_per_island, self._best_score_per_island,
+            self._best_scores_per_test_per_island))
 
-  def _register_program_in_island(
+  def register_program(
       self,
       program: code_manipulation.Function,
       island_id: int,
       scores_per_test: ScoresPerTest,
   ) -> None:
-    """Registers `program` in the specified island."""
-    self._islands[island_id].register_program(program, scores_per_test)
+    """Registers `program` in the database."""
+    # Record best score per island.
     score = _reduce_score(scores_per_test)
     if score > self._best_score_per_island[island_id]:
       self._best_program_per_island[island_id] = program
-      self._best_scores_per_test_per_island[island_id] = scores_per_test
       self._best_score_per_island[island_id] = score
+      self._best_scores_per_test_per_island[island_id] = scores_per_test
       logging.info('Best score of island %d increased to %s', island_id, score)
 
-  def register_program(
-      self,
-      program: code_manipulation.Function,
-      island_id: int | None,
-      scores_per_test: ScoresPerTest,
-  ) -> None:
-    """Registers `program` in the database."""
-    # In an asynchronous implementation we should consider the possibility of
-    # registering a program on an island that had been reset after the prompt
-    # was generated. Leaving that out here for simplicity.
-    if island_id is None:
-      # This is a program added at the beginning, so adding it to all islands.
-      for island_id in range(len(self._islands)):
-        self._register_program_in_island(program, island_id, scores_per_test)
-    else:
-      self._register_program_in_island(program, island_id, scores_per_test)
+    # Register program in island.
+    self._islands[island_id].register_program(program, scores_per_test)
 
-    # Check whether it is time to reset an island.
-    if (time.time() - self._last_reset_time > self._config.reset_period):
+    # Reset islands if necessary.
+    if time.time() - self._last_reset_time > self._config.reset_period:
       self._last_reset_time = time.time()
       self.reset_islands()
 
   def reset_islands(self) -> None:
     """Resets the weaker half of islands."""
     self._reset_count += 1
-    # We sort best scores after adding minor noise to break ties.
+    # Sort islands by their best score.
     indices_sorted_by_score: np.ndarray = np.argsort(
-        self._best_score_per_island +
-        np.random.randn(len(self._best_score_per_island)) * 1e-6)
+        self._best_score_per_island)
     num_islands_to_reset = self._config.num_islands // 2
     reset_islands_ids = indices_sorted_by_score[:num_islands_to_reset]
     keep_islands_ids = indices_sorted_by_score[num_islands_to_reset:]
+
+    # For each island to reset, pick a random island from the top half and
+    # copy its content.
     for island_id in reset_islands_ids:
-      self._islands[island_id] = Island(
-          self._template,
-          self._function_to_evolve,
-          self._config.functions_per_prompt,
-          self._config.cluster_sampling_temperature_init,
-          self._config.cluster_sampling_temperature_period)
-      self._best_score_per_island[island_id] = -float('inf')
       founder_island_id = np.random.choice(keep_islands_ids)
-      founder = self._best_program_per_island[founder_island_id]
-      founder_scores = self._best_scores_per_test_per_island[founder_island_id]
-      self._register_program_in_island(founder, island_id, founder_scores)
+      founder_island = self._islands[founder_island_id]
+      founder_best_program = self._best_program_per_island[founder_island_id]
+      founder_best_score = self._best_score_per_island[founder_island_id]
+      founder_best_scores_per_test = self._best_scores_per_test_per_island[
+          founder_island_id]
+      self._islands[island_id] = copy.deepcopy(founder_island)
+      self._best_program_per_island[island_id] = founder_best_program
+      self._best_score_per_island[island_id] = founder_best_score
+      self._best_scores_per_test_per_island[
+          island_id] = founder_best_scores_per_test
+
+  def get_prompt(self) -> tuple[str, int]:
+    """Returns a prompt for the sampler."""
+    # Pick a random island.
+    island_id = np.random.randint(len(self._islands))
+    prompt, version_generated = self._islands[island_id].get_prompt()
+    return prompt, version_generated, island_id
 
 
 class Island:
-  """A sub-population of the programs database."""
+  """A sub-population of programs."""
 
   def __init__(
       self,
@@ -184,8 +195,9 @@ class Island:
     self._template: code_manipulation.Program = template
     self._function_to_evolve: str = function_to_evolve
     self._functions_per_prompt: int = functions_per_prompt
-    self._cluster_sampling_temperature_init = cluster_sampling_temperature_init
-    self._cluster_sampling_temperature_period = (
+    self._cluster_sampling_temperature_init: float = (
+        cluster_sampling_temperature_init)
+    self._cluster_sampling_temperature_period: int = (
         cluster_sampling_temperature_period)
 
     self._clusters: dict[Signature, Cluster] = {}
@@ -281,6 +293,9 @@ class Cluster:
     self._score = score
     self._programs: list[code_manipulation.Function] = [implementation]
     self._lengths: list[int] = [len(str(implementation))]
+    self._program_fingerprints: set[str] = {
+        _get_program_fingerprint(implementation)
+    }
 
   @property
   def score(self) -> float:
@@ -289,8 +304,13 @@ class Cluster:
 
   def register_program(self, program: code_manipulation.Function) -> None:
     """Adds `program` to the cluster."""
+    fingerprint = _get_program_fingerprint(program)
+    if fingerprint in self._program_fingerprints:
+      return  # Skip duplicate
+
     self._programs.append(program)
     self._lengths.append(len(str(program)))
+    self._program_fingerprints.add(fingerprint)
 
   def sample_program(self) -> code_manipulation.Function:
     """Samples a program, giving higher probability to shorther programs."""
