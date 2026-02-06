@@ -41,11 +41,13 @@ class LLM:
   def _draw_sample(self, prompt: str) -> str:
     """Returns a predicted continuation of `prompt`."""
     model = os.getenv("LLM_MODEL", "arcee-ai/trinity-large-preview:free")
+    user_prompt = f"Please provide the implementation for the function body of `priority` in the following code. The goal is to maximize the size of the admissible set. \n\n{prompt}"
+    print(f"Prompt sent to LLM:\n---\n{prompt}\n---\n")
     resp = self.client.chat.completions.create(
         model=model,
         messages=[
-            {"role": "system", "content": "You are a search algorithm engineer. Write concise, high-performance code. Output code only, no markdown. Important: Your response must start directly with the function body code. Do not include the function signature, docstring, or any introductory text. Just the implementation logic."},
-            {"role": "user", "content": prompt}
+            {"role": "system", "content": "You are a search algorithm engineer. Your goal is to improve the computational logic of the function body. STRICTLY adhere to the function's signature and return type. DO NOT change the function's category or purpose. Write concise, high-performance code using branching structures or loops if necessary. Output code only, STRICTLY NO MARKDOWN and NO COMMENTS USING '#'. Your response should contain ONLY the function body code. Do not repeat the function signature or docstring."},
+            {"role": "user", "content": user_prompt}
         ],
     )
     if resp.usage:
@@ -97,3 +99,11 @@ class Sampler:
             f"Best Score (Island {prompt.island_id}): {best_score} | "
             f"Global Best: {global_best_score} | "
             f"Active Islands: {active_islands}/{num_islands}")
+
+      print("Cluster Stats:")
+      for i, island in enumerate(self._database._islands):
+          if not island._clusters:
+              continue
+          print(f"  Island {i}: {len(island._clusters)} clusters")
+          for sig, cluster in island._clusters.items():
+              print(f"    Cluster {sig} (Score: {cluster.score}): {len(cluster._programs)} programs")
