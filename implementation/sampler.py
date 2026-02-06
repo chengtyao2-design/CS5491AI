@@ -15,6 +15,7 @@
 
 """Class for sampling new programs."""
 import os
+import time
 from collections.abc import Collection, Sequence
 
 import numpy as np
@@ -48,23 +49,32 @@ class LLM:
     model = os.getenv("LLM_MODEL", "arcee-ai/trinity-large-preview:free")
     user_prompt = f"Please provide the implementation for the function body of `priority` in the following code. The goal is to maximize the size of the admissible set. \n\n{prompt}"
     print(f"Prompt sent to LLM:\n---\n{prompt}\n---\n")
-    resp = self.client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": "You are a search algorithm engineer. Your goal is to improve the computational logic of the function body. STRICTLY adhere to the function's signature and return type. DO NOT change the function's category or purpose. Write concise, high-performance code using branching structures or loops if necessary. Output code only, STRICTLY NO MARKDOWN and NO COMMENTS USING '#'. Your response should contain ONLY the function body code. Do not repeat the function signature or docstring."},
-            {"role": "user", "content": user_prompt}
-        ],
-    )
-    if resp.usage:
-        LLM._total_tokens_used += resp.usage.total_tokens
-    return resp.choices[0].message.content
+    
+    retries = 5
+    for attempt in range(retries):
+        try:
+            resp = self.client.chat.completions.create(
+                model=model,
+                messages=[
+                    {"role": "system", "content": "You are a search algorithm engineer. Your goal is to improve the computational logic of the function body. STRICTLY adhere to the function's signature and return type. DO NOT change the function's category or purpose. Write concise, high-performance code using branching structures or loops if necessary. Output code only, STRICTLY NO MARKDOWN and NO COMMENTS USING '#'. Your response should contain ONLY the function body code. Do not repeat the function signature or docstring."},
+                    {"role": "user", "content": user_prompt}
+                ],
+            )
+            if resp.usage:
+                LLM._total_tokens_used += resp.usage.total_tokens
+            return resp.choices[0].message.content
+        except Exception as e:
+            print(f"LLM API call failed (attempt {attempt+1}/{retries}): {e}")
+            if attempt < retries - 1:
+                time.sleep(2)
+            else:
+                print("Max retries reached. Returning empty sample.")
+                return ""
 
   def draw_samples(self, prompt: str) -> Collection[str]:
     """Returns multiple predicted continuations of `prompt`."""
     return [self._draw_sample(prompt) for _ in range(self._samples_per_prompt)]
 
-
-import time
 
 class Sampler:
   """Node that samples program continuations and sends them for analysis."""
