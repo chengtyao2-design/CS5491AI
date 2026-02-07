@@ -73,7 +73,7 @@ def main(specification: str, inputs: Sequence[Any], config: config_lib.Config):
   with open(log_file_path, 'w') as f:
       f.write(f"FunSearch Log - Started at {timestamp}\n")
       f.write(f"Model: {current_model}\n")
-      f.write("Format: Iteration | Global Best | Total Tokens | Resets | Best Function Code\n\n")
+      f.write("Format: Epoch | Iteration | Global Best | Funcs/Prompt | Replace | Total Tokens | Resets | Best Function Code\n\n")
 
   samplers = [sampler.Sampler(database, evaluators, config.samples_per_prompt, config.iterations, log_file_path)
               for _ in range(config.num_samplers)]

@@ -37,6 +37,7 @@ class LLM:
     self.client = OpenAI(
         base_url="https://openrouter.ai/api/v1",
         api_key=os.getenv("OPENROUTER_API_KEY"),
+        timeout=30.0,
     )
 
   def _parse_samples(self, content: str) -> tuple[Sequence[str], int]:
@@ -101,7 +102,7 @@ class LLM:
       
       print(f"DEBUG: Requesting fix for error...")
 
-      retries = 3
+      retries = 2
       for attempt in range(retries):
           try:
               resp = self.client.chat.completions.create(
@@ -240,8 +241,9 @@ class Sampler:
              current_code = sample
              current_error = error_msg
              
-             for fix_attempt in range(2):
-                 print(f"DEBUG: Attempting to fix code (Attempt {fix_attempt+1}/2).")
+             # Reduce fix attempts to 1 to prevent long stalls
+             for fix_attempt in range(1):
+                 print(f"DEBUG: Attempting to fix code (Attempt {fix_attempt+1}/1).")
                  
                  fixed_code = self._llm.resolve_error(prompt_code, current_code, current_error)
                  
@@ -287,7 +289,19 @@ class Sampler:
                       best_scores_str = f"({vals_str}) (Score: {score})"
                   break
           
-          log_entry = (f"{iteration} | {best_scores_str} | {self._llm.total_tokens_used} | {self._database._reset_count} | "
+          # Calculate current dynamic parameters for logging
+          current_funcs_per_prompt = self._database._functions_per_prompt
+          if self._epoch > 3:
+              current_funcs_per_prompt += (self._epoch - 3)
+          
+          # Replace strategy logic (simplified check based on epoch and cluster count approximation)
+          # Note: Actual replace strategy depends on specific island state, here we log the Policy Intent.
+          replace_strategy = "True"
+          if self._epoch >= 2:
+               replace_strategy = "False (Intent)"
+
+          log_entry = (f"{self._epoch} | {iteration} | {best_scores_str} | {current_funcs_per_prompt} | {replace_strategy} | "
+                       f"{self._llm.total_tokens_used} | {self._database._reset_count} | "
                        f"Best Function:\n{best_program_code}\n"
                        f"{'-'*80}\n")
           

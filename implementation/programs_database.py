@@ -328,10 +328,10 @@ class Island:
     probabilities = _softmax(cluster_scores, temperature)
 
     # Calculate dynamic functions_per_prompt based on epoch
-    # If epoch > 5, increase prompt size by (epoch - 5)
+    # If epoch > 3, increase prompt size by (epoch - 3)
     current_functions_per_prompt = self._functions_per_prompt
-    if epoch > 5:
-        current_functions_per_prompt += (epoch - 5)
+    if epoch > 3:
+        current_functions_per_prompt += (epoch - 3)
 
     # At the beginning of an experiment when we have few clusters, place fewer
     # programs into the prompt.
@@ -348,7 +348,7 @@ class Island:
     #    The original code sorts the *selected* implementations by score later.
     #    Here we just select indices.
     
-    if epoch >= 3:
+    if epoch >= 2:
         # User requested: "sample without replacement" (already handled by logic above if possible)
         # But if we force replace=False when len < needed, it crashes. So we keep safety check.
         replace = False if len(signatures) >= functions_per_prompt else True
