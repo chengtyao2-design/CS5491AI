@@ -423,5 +423,5 @@ class Evaluator:
     else:
         print("DEBUG: Program execution failed or produced no scores.")
 
-    if scores_per_test:
+    if scores_per_test and len(scores_per_test) == len(self._inputs):
       self._database.register_program(new_function, island_id, scores_per_test)

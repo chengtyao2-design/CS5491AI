@@ -193,12 +193,20 @@ class Sampler:
           # Find the program with the global best score
           best_programs = self._database.get_best_programs_per_island()
           best_program_code = ""
-          for program, score, _ in best_programs:
+          best_scores_str = str(global_best_score)
+          
+          for program, score, scores_per_test in best_programs:
               if score == global_best_score and program:
                   best_program_code = str(program)
+                  if scores_per_test:
+                      # Format as (val1, val2, ...) (Score: total) to show details for multi-input tasks
+                      # Sort keys to ensure deterministic order of values
+                      sorted_vals = [scores_per_test[k] for k in sorted(scores_per_test.keys())]
+                      vals_str = ", ".join(str(v) for v in sorted_vals)
+                      best_scores_str = f"({vals_str}) (Score: {score})"
                   break
           
-          log_entry = (f"{iteration} | {global_best_score} | {self._llm.total_tokens_used} | {self._database._reset_count} | "
+          log_entry = (f"{iteration} | {best_scores_str} | {self._llm.total_tokens_used} | {self._database._reset_count} | "
                        f"Best Function:\n{best_program_code}\n"
                        f"{'-'*80}\n")
           
