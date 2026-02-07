@@ -201,11 +201,11 @@ class ProgramsDatabase:
       """Returns the temperature used in the last sampling."""
       return getattr(self, '_current_temperature', self._cluster_sampling_temperature_init)
 
-  def get_prompt(self) -> tuple[str, int]:
+  def get_prompt(self, epoch: int = 1) -> tuple[str, int]:
     """Returns a prompt for the sampler."""
     # Pick a random island.
     island_id = np.random.randint(len(self._islands))
-    prompt, version_generated = self._islands[island_id].get_prompt()
+    prompt, version_generated = self._islands[island_id].get_prompt(epoch)
     return prompt, version_generated, island_id
 
 
@@ -291,7 +291,7 @@ class Island:
       """Returns the temperature used in the last sampling."""
       return getattr(self, '_current_temperature', self._cluster_sampling_temperature_init)
 
-  def get_prompt(self) -> tuple[str, int]:
+  def get_prompt(self, epoch: int = 1) -> tuple[str, int]:
     """Constructs a prompt containing functions from this island."""
     signatures = list(self._clusters.keys())
     cluster_scores = np.array(
@@ -327,13 +327,32 @@ class Island:
     self._current_temperature = temperature # Update with boosted temperature
     probabilities = _softmax(cluster_scores, temperature)
 
+    # Calculate dynamic functions_per_prompt based on epoch
+    # If epoch > 5, increase prompt size by (epoch - 5)
+    current_functions_per_prompt = self._functions_per_prompt
+    if epoch > 5:
+        current_functions_per_prompt += (epoch - 5)
+
     # At the beginning of an experiment when we have few clusters, place fewer
     # programs into the prompt.
-    functions_per_prompt = min(len(self._clusters), self._functions_per_prompt) #**
+    functions_per_prompt = min(len(self._clusters), current_functions_per_prompt) #**
 
-    # If we have enough clusters, sample without replacement to avoid duplicates.
-    replace = True # Always sample with replacement as requested
+    # Dynamic Sampling Strategy:
+    # 1. Default: If we have enough clusters, sample without replacement.
+    replace = len(signatures) < functions_per_prompt
     
+    # 2. Epoch >= 3 Rule: Force sampling without replacement if possible.
+    #    AND sort indices by score to prioritize better programs if needed?
+    #    Actually, np.random.choice with probabilities already handles prioritization.
+    #    But the user asked for "sort by score" explicitly for epoch >= 3?
+    #    The original code sorts the *selected* implementations by score later.
+    #    Here we just select indices.
+    
+    if epoch >= 3:
+        # User requested: "sample without replacement" (already handled by logic above if possible)
+        # But if we force replace=False when len < needed, it crashes. So we keep safety check.
+        replace = False if len(signatures) >= functions_per_prompt else True
+        
     idx = np.random.choice(
         len(signatures), size=functions_per_prompt, p=probabilities, replace=replace)
     chosen_signatures = [signatures[i] for i in idx]

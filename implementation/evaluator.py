@@ -50,7 +50,7 @@ def _trim_function_body(generated_code: str) -> str:
   if not generated_code:
     return ''
 
-  print(f"DEBUG: Raw generated code:\n{generated_code!r}")
+  # print(f"DEBUG: Raw generated code:\n{generated_code!r}")
 
   # Filter out full-line comments starting with #
   lines = generated_code.splitlines()
@@ -63,7 +63,7 @@ def _trim_function_body(generated_code: str) -> str:
     # Filter out lines that start with ```
     lines = [line for line in lines if not line.strip().startswith('```')]
     generated_code = '\n'.join(lines)
-    print(f"DEBUG: Cleaned markdown code:\n{generated_code!r}")
+    # print(f"DEBUG: Cleaned markdown code:\n{generated_code!r}")
 
   # Try to detect if the code is a full function definition (Issue 1)
   try:
@@ -73,7 +73,7 @@ def _trim_function_body(generated_code: str) -> str:
     func_defs = [node for node in ast.walk(direct_tree) if isinstance(node, ast.FunctionDef)]
     if func_defs and len(func_defs) >= 1:
        # Use the first function found (assuming it's the intended one)
-       print("DEBUG: Detected full function definition, extracting body...")
+       # print("DEBUG: Detected full function definition, extracting body...")
        target_node = func_defs[0]
 
        if target_node.body:
@@ -93,7 +93,7 @@ def _trim_function_body(generated_code: str) -> str:
       first_line = lines[first_line_idx]
       # Check if it looks like a function definition
       if first_line.strip().startswith('def ') and ':' in first_line:
-           print("DEBUG: Detected function signature in first line. Attempting to strip it.")
+           # print("DEBUG: Detected function signature in first line. Attempting to strip it.")
            
            # Calculate indentation of the def
            def_indent = len(first_line) - len(first_line.lstrip())
@@ -114,7 +114,7 @@ def _trim_function_body(generated_code: str) -> str:
                            # Dedent this segment
                            segment_str = '\n'.join(body_segment)
                            dedented = textwrap.dedent(segment_str)
-                           print("DEBUG: Successfully extracted body from nested function.")
+                           # print("DEBUG: Successfully extracted body from nested function.")
                            generated_code = dedented
                            lines = generated_code.splitlines()
                            first_line_idx = next((i for i, line in enumerate(lines) if line.strip()), None)
@@ -245,10 +245,10 @@ def _trim_function_body(generated_code: str) -> str:
 
   visitor = _FunctionLineVisitor('fake_function_header')
   visitor.visit(tree)
-  print(f"DEBUG: Function end line detected: {visitor.function_end_line}")
+  # print(f"DEBUG: Function end line detected: {visitor.function_end_line}")
   
   body_lines = code.splitlines()[1:visitor.function_end_line]
-  print(f"DEBUG: Extracted body lines:\n{body_lines}")
+  # print(f"DEBUG: Extracted body lines:\n{body_lines}")
   
   # Normalize indentation to 2 spaces
   body = '\n'.join(body_lines)
@@ -307,7 +307,7 @@ def _run_in_subprocess(program: str, function_name: str, test_input: Any, queue:
     # exec() executes the program in the local_scope.
     exec(program, local_scope, local_scope)
     if function_name not in local_scope:
-      queue.put((None, False))
+      queue.put((traceback.format_exc(), False))
       return
     func = local_scope[function_name]
     try:
@@ -402,19 +402,38 @@ class Evaluator:
       sample: str,
       island_id: int | None,
       version_generated: int | None,
-  ) -> None:
-    """Compiles the sample into a program and executes it on test inputs."""
-    new_function, program = _sample_to_program(
-        sample, version_generated, self._template, self._function_to_evolve)
+  ) -> str | None:
+    """Compiles the sample into a program and executes it on test inputs.
+    
+    Returns:
+        str | None: The error message/traceback if execution failed, otherwise None.
+    """
+    try:
+        new_function, program = _sample_to_program(
+            sample, version_generated, self._template, self._function_to_evolve)
+    except Exception as e:
+        return f"Compilation/Parsing Error: {str(e)}"
 
     scores_per_test = {}
+    first_error = None
+    
     for current_input in self._inputs:
       test_output, runs_ok = self._sandbox.run(
           program, self._function_to_run, current_input, self._timeout_seconds)
+      
+      if not runs_ok:
+          if first_error is None:
+              first_error = str(test_output) if test_output else "Unknown execution error"
+      
       if (runs_ok and not _calls_ancestor(program, self._function_to_evolve)
           and test_output is not None):
         if not isinstance(test_output, (int, float)):
-          raise ValueError('@function.run did not return an int/float score.')
+          # raise ValueError('@function.run did not return an int/float score.')
+          # Don't raise, just treat as error
+          if first_error is None:
+              first_error = f"@function.run returned non-numeric score: {test_output}"
+          continue
+          
         scores_per_test[current_input] = test_output
     
     # Debug Logging: Score
@@ -425,3 +444,6 @@ class Evaluator:
 
     if scores_per_test and len(scores_per_test) == len(self._inputs):
       self._database.register_program(new_function, island_id, scores_per_test)
+      return None # Success
+      
+    return first_error
