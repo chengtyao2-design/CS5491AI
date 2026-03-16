@@ -4,3 +4,4 @@ absl-py>=0.1
 openai>=1.0
 python-dotenv>=1.0
 matplotlib>=3.5
+tsplib95>=0.7

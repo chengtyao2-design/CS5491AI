@@ -69,3 +69,4 @@ class Config:
   )
   early_stop_patience: int = 5  # 早停的条件
   result_dir: str = "result"
+  problem: str = "admissible"  # Problem name for result subdir: {problem}_{unix_timestamp}

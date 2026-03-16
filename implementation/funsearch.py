@@ -72,6 +72,7 @@ def main(specification: str, inputs: Sequence[Any], config: config_lib.Config):
           config.goal_description,
           early_stop_patience=config.early_stop_patience,
           result_dir=str(result_dir),
+          problem=config.problem,
           template=template,
           function_to_evolve=function_to_evolve,
       )

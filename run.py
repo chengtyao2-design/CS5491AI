@@ -25,7 +25,7 @@ def _load_tsp_test_inputs(tsplib_paths=None, random_specs=None):
     from implementation import tsp_utils
     return tsp_utils.prepare_test_inputs(
         tsplib_paths=tsplib_paths,
-        random_specs=random_specs or [(15, 42), (20, 123), (25, 456)],
+        random_specs=random_specs,
     )
 
 
@@ -43,16 +43,49 @@ if __name__ == '__main__':
         default=None,
         help='Paths to TSPLib .tsp files (for --problem tsp)',
     )
+    parser.add_argument(
+        '--random',
+        nargs='*',
+        type=int,
+        default=None,
+        help='City counts for random TSP instances (e.g. 15 20 25)',
+    )
+    parser.add_argument(
+        '--seed',
+        nargs='*',
+        type=int,
+        default=None,
+        help='Seeds for random instances; must match --random count if provided',
+    )
     args = parser.parse_args()
 
     print(f"Running FunSearch from: {ROOT_DIR}")
 
     if args.problem == 'tsp':
         SPEC_FILE = ROOT_DIR / 'implementation' / 'specification_tsp.txt'
-        test_inputs = _load_tsp_test_inputs(
-            tsplib_paths=args.tsplib,
-            random_specs=[(15, 42), (20, 123), (25, 456)] if not args.tsplib else None,
-        )
+        if args.random is not None and args.seed is not None:
+            if len(args.random) != len(args.seed):
+                print(
+                    f"Error: --random has {len(args.random)} values but --seed has {len(args.seed)}. Counts must match."
+                )
+                sys.exit(1)
+        if args.tsplib:
+            test_inputs = _load_tsp_test_inputs(
+                tsplib_paths=args.tsplib,
+                random_specs=None,
+            )
+        elif args.random:
+            seeds = args.seed if args.seed is not None else [0] * len(args.random)
+            random_specs = list(zip(args.random, seeds))
+            test_inputs = _load_tsp_test_inputs(
+                tsplib_paths=None,
+                random_specs=random_specs,
+            )
+        else:
+            test_inputs = _load_tsp_test_inputs(
+                tsplib_paths=None,
+                random_specs=[(15, 42), (20, 123), (25, 456)],
+            )
         goal_description = (
             "minimize the total TSP tour length. The evaluate function returns "
             "negative tour length (higher is better). Design heuristics that work "
@@ -69,7 +102,9 @@ if __name__ == '__main__':
             specification_content = f.read()
 
         default_config = dataclasses.replace(
-            config_lib.Config(), goal_description=goal_description
+            config_lib.Config(),
+            goal_description=goal_description,
+            problem=args.problem,
         )
 
         print(f"Problem: {args.problem}")
@@ -77,7 +112,14 @@ if __name__ == '__main__':
         print(f"Test Inputs: {len(test_inputs)} instance(s)")
         if args.problem == 'tsp':
             for inst in test_inputs:
-                print(f"  - {inst.instance_id} ({inst.dist_matrix.shape[0]} cities)")
+                opt_str = (
+                    f", optimal={inst.optimal_tour_length:.0f}"
+                    if inst.optimal_tour_length is not None
+                    else ", no optimal (gap disabled)"
+                )
+                print(
+                    f"  - {inst.instance_id} ({inst.dist_matrix.shape[0]} cities{opt_str})"
+                )
         else:
             print(f"  {test_inputs}")
 
