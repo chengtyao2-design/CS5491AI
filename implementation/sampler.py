@@ -208,8 +208,8 @@ class Sampler:
         for sig, cluster in island._clusters.items():
           logging.info("    Cluster %s (Score: %s): %d programs", sig, cluster.score, len(cluster._programs))
       
-      # Early stopping check
-      if self._early_stop_patience > 0 and iteration - self._last_improvement_iter >= self._early_stop_patience:
+      # Early stopping check (-1 disables)
+      if self._early_stop_patience != -1 and iteration - self._last_improvement_iter >= self._early_stop_patience:
         logging.info(
             "Early stopping: No improvement for %d iterations (since iter %d)",
             self._early_stop_patience, self._last_improvement_iter,
@@ -285,9 +285,11 @@ class Sampler:
         global_best = max(self._global_best_history)
     best_program_info = self._database.get_global_best_program()
     
+    llm_model = os.getenv("LLM_MODEL", "arcee-ai/trinity-large-preview:free")
     final_data = {
         "total_iterations": self._total_iterations,
         "total_tokens": self._llm.total_tokens_used,
+        "llm_model": llm_model,
         "global_best_score": global_best,
         "elapsed_seconds": int(time.time() - self._start_time),
         "score_history": self._global_best_history,
@@ -443,6 +445,7 @@ class Sampler:
     # 4. Save experiment summary markdown
     with open(out_dir / "experiment_summary.md", "w", encoding="utf-8") as f:
       f.write("# Experiment Summary\n\n")
+      f.write(f"- **LLM Model**: {llm_model}\n")
       f.write(f"- **Total Iterations**: {self._total_iterations}\n")
       f.write(f"- **Total Tokens**: {self._llm.total_tokens_used}\n")
       f.write(f"- **Global Best Score**: {global_best}\n")
@@ -460,5 +463,5 @@ class Sampler:
         f.write(f"\nAverage gap: {final_data['avg_gap_pct']}%\n\n")
         f.write("See `optimal_comparison.png` and `gap_progression.png` for the visualizations.\n")
     
-    logging.info("Results saved to %s", out_dir)
+    logging.info("Results saved to %s (model: %s)", out_dir, llm_model)
     return out_dir

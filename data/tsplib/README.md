@@ -25,8 +25,10 @@
 
 ## Gap 计算说明
 
-- 含 **OPTIMUM** 或 **BEST_KNOWN** 的 `.tsp` 可直接计算 gap
-- 仅有 `.opt.tour` 的实例需解析 tour 并计算路径长度得到 optimal；当前实现未支持，需在 `.tsp` 中手动添加 OPTIMUM 行
+- 含 **OPTIMUM**、**BEST_KNOWN** 或 **OPTIMAL_VALUE** 的 `.tsp` 可直接计算 gap
+- 若 `.tsp` 无上述字段，会自动查找同目录下的 `.opt.tour`（如 `eil51.tsp` → `eil51.opt.tour`），解析 tour 并用距离矩阵计算 optimal
+- 启动时日志会提示每个实例的 optimal 来源（`.tsp` / `.opt.tour`），若无 optimal 会给出 WARNING，gap 相关图表将不生成
+- 使用 TSPLib 且有 optimal 时，结果目录会额外生成 `optimal_comparison.png`（各实例 gap 柱状图）和 `gap_progression.png`（gap 随迭代变化曲线）
 
 ## 使用方式
 
@@ -42,3 +44,7 @@ python run.py --problem tsp --random 15 20 25 --seed 42 123 456
 # 不指定 --tsplib 和 --random 时，使用预设：3 个随机实例 (15,20,25) + seed (42,123,456)
 python run.py --problem tsp
 ```
+
+## 结果输出
+
+结果保存在 `result/tsp_{unix_timestamp}/` 下，包含 `score_progression.png`、`final_results.json`、`best_program.py`、`experiment_summary.md`。当所有实例均有 optimal 时，还会生成 `optimal_comparison.png` 和 `gap_progression.png`。

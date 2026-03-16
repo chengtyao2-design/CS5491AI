@@ -63,10 +63,10 @@ class Config:
   num_samplers: int = 1
   num_evaluators: int = 140
   samples_per_prompt: int = 4
-  iterations: int = 10
+  iterations: int = 50
   goal_description: str = (
       "maximize the size of the admissible set"
   )
-  early_stop_patience: int = 5  # 早停的条件
+  early_stop_patience: int = -1  # 早停的条件
   result_dir: str = "result"
   problem: str = "admissible"  # Problem name for result subdir: {problem}_{unix_timestamp}

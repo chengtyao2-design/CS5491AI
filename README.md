@@ -126,7 +126,8 @@ logging.getLogger().setLevel(logging.DEBUG)
 
 1. **框架**：每步用 `priority(city_idx, tour, unvisited, D)` 对候选城市打分，选分数最高的城市
 2. **插入**：用最便宜插入法（cheapest insertion）将城市插入当前路径
-3. **进化目标**：LLM 不断改进 `priority` 的实现，使 `evaluate` 返回的 `-tour_length` 越大越好
+3. **Baseline**：初始 priority 为最近邻（nearest-neighbor），LLM 可尝试最远插入、regret 等超越
+4. **进化目标**：LLM 不断改进 `priority` 的实现，使 `evaluate` 返回的 `-tour_length` 越大越好
 
 ### FunSearch 流程
 
@@ -157,6 +158,10 @@ logging.getLogger().setLevel(logging.DEBUG)
 ### 1. `ValueError: zero-size array to reduction operation minimum`
 
 LLM 生成的 `priority` 在边界情况（如只剩一个未访问城市）下对空数组调用 `np.min`。该样本会被视为无效，不注册到数据库；可忽略或通过改进 prompt 减少此类输出。
+
+### 1b. `TypeError: '>' not supported between instances of 'NoneType' and 'NoneType'`
+
+当 `priority` 返回 `None` 或非数值时，框架会将其视为 `-inf` 并跳过该候选，不再崩溃。
 
 ### 2. 早停未触发
 

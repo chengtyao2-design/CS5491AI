@@ -17,6 +17,17 @@ def _calc_insert_cost(D, prv, nxt, ins):
   return D[prv, ins] + D[ins, nxt] - D[prv, nxt]
 
 
+def _safe_priority_score(s):
+  """Convert priority() output to float; use -inf for None/NaN so argmax skips invalid."""
+  if s is None:
+    return float('-inf')
+  try:
+    v = float(s)
+    return v if np.isfinite(v) else float('-inf')
+  except (TypeError, ValueError):
+    return float('-inf')
+
+
 def solve(instance):
   """Build a TSP tour via greedy construction with cheapest insertion.
 
@@ -41,8 +52,9 @@ def solve(instance):
       city = 0
     else:
       scores = np.array([
-          priority(city_idx, tour, unvisited, D) for city_idx in feas_ind
-      ])
+          _safe_priority_score(priority(city_idx, tour, unvisited, D))
+          for city_idx in feas_ind
+      ], dtype=float)
       best_idx = np.argmax(scores)
       city = feas_ind[best_idx]
 
@@ -75,6 +87,9 @@ def evaluate(instance):
 def priority(city_idx, current_tour, unvisited_mask, dist_matrix):
   """Scores a candidate city for greedy selection.
 
+  Baseline: nearest-neighbor heuristic (prefer city closest to the tour).
+  Higher score = more preferred. Try farthest insertion, regret-based, etc.
+
   Args:
     city_idx: Index of the candidate city.
     current_tour: List of already visited city indices.
@@ -84,4 +99,5 @@ def priority(city_idx, current_tour, unvisited_mask, dist_matrix):
   Returns:
     A score; higher means this city is preferred as the next to add.
   """
-  return 0.0
+  min_d = np.min(dist_matrix[city_idx, current_tour])
+  return -min_d

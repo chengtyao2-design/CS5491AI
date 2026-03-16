@@ -88,9 +88,9 @@ if __name__ == '__main__':
             )
         goal_description = (
             "minimize the total TSP tour length. The evaluate function returns "
-            "negative tour length (higher is better). Design heuristics that work "
-            "well across multiple instance sizes and distributions (e.g. nearest "
-            "neighbor, farthest insertion)."
+            "negative tour length (higher is better). The baseline uses "
+            "nearest-neighbor (prefer city closest to tour). Beat it with "
+            "farthest insertion, regret-based, or other heuristics."
         )
     else:
         SPEC_FILE = ROOT_DIR / 'implementation' / 'specification_nonsymmetric_admissible_set.txt'
@@ -107,7 +107,9 @@ if __name__ == '__main__':
             problem=args.problem,
         )
 
+        llm_model = os.getenv("LLM_MODEL", "arcee-ai/trinity-large-preview:free")
         print(f"Problem: {args.problem}")
+        print(f"LLM Model: {llm_model}")
         print(f"Specification: {SPEC_FILE.name}")
         print(f"Test Inputs: {len(test_inputs)} instance(s)")
         if args.problem == 'tsp':
