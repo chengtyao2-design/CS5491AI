@@ -14,6 +14,8 @@
 # ==============================================================================
 
 """A single-threaded implementation of the FunSearch pipeline."""
+from pathlib import Path
+
 from collections.abc import Sequence
 from typing import Any
 
@@ -58,11 +60,30 @@ def main(specification: str, inputs: Sequence[Any], config: config_lib.Config):
   initial = template.get_function(function_to_evolve).body
   evaluators[0].analyse(initial, island_id=None, version_generated=None)
 
-  samplers = [sampler.Sampler(database, evaluators, config.samples_per_prompt, config.iterations)
-              for _ in range(config.num_samplers)]
+  result_dir = Path(config.result_dir)
+  result_dir.mkdir(parents=True, exist_ok=True)
+
+  samplers = [
+      sampler.Sampler(
+          database,
+          evaluators,
+          config.samples_per_prompt,
+          config.iterations,
+          config.goal_description,
+          early_stop_patience=config.early_stop_patience,
+          result_dir=str(result_dir),
+          template=template,
+          function_to_evolve=function_to_evolve,
+      )
+      for _ in range(config.num_samplers)
+  ]
 
   # This loop can be executed in parallel on remote sampler machines. As each
   # sampler enters an infinite loop, without parallelization only the first
   # sampler will do any work.
   for s in samplers:
     s.sample()
+
+  # Generate summary report after all samplers finish
+  if samplers:
+    samplers[0].generate_summary_report()

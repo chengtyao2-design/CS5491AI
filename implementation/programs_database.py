@@ -109,6 +109,20 @@ class ProgramsDatabase:
     code, version_generated = self._islands[island_id].get_prompt()
     return Prompt(code, version_generated, island_id)
 
+  def get_global_best_score(self) -> float:
+    """Returns the current global best score across all islands."""
+    return max(self._best_score_per_island)
+
+  def get_global_best_program(self) -> tuple[code_manipulation.Function, int] | None:
+    """Returns (best_program, island_id) or None if no valid program yet."""
+    best_score = self.get_global_best_score()
+    if best_score == -float('inf'):
+      return None
+    for island_id, score in enumerate(self._best_score_per_island):
+      if score == best_score and self._best_program_per_island[island_id] is not None:
+        return self._best_program_per_island[island_id], island_id
+    return None
+
   def _register_program_in_island(
       self,
       program: code_manipulation.Function,

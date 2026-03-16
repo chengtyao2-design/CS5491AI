@@ -15,6 +15,7 @@
 
 """Class for evaluating programs proposed by the Sampler."""
 import ast
+import logging
 from collections.abc import Sequence
 import copy
 import multiprocessing
@@ -50,7 +51,7 @@ def _trim_function_body(generated_code: str) -> str:
   if not generated_code:
     return ''
 
-  print(f"DEBUG: Raw generated code:\n{generated_code!r}")
+  logging.debug("Raw generated code:\n%s", generated_code)
 
   # Filter out full-line comments starting with #
   lines = generated_code.splitlines()
@@ -63,7 +64,7 @@ def _trim_function_body(generated_code: str) -> str:
     # Filter out lines that start with ```
     lines = [line for line in lines if not line.strip().startswith('```')]
     generated_code = '\n'.join(lines)
-    print(f"DEBUG: Cleaned markdown code:\n{generated_code!r}")
+    logging.debug("Cleaned markdown code:\n%s", generated_code)
 
   # Try to detect if the code is a full function definition (Issue 1)
   try:
@@ -73,7 +74,7 @@ def _trim_function_body(generated_code: str) -> str:
     func_defs = [node for node in ast.walk(direct_tree) if isinstance(node, ast.FunctionDef)]
     if func_defs and len(func_defs) >= 1:
        # Use the first function found (assuming it's the intended one)
-       print("DEBUG: Detected full function definition, extracting body...")
+       logging.debug("Detected full function definition, extracting body...")
        target_node = func_defs[0]
 
        if target_node.body:
@@ -93,7 +94,7 @@ def _trim_function_body(generated_code: str) -> str:
       first_line = lines[first_line_idx]
       # Check if it looks like a function definition
       if first_line.strip().startswith('def ') and ':' in first_line:
-           print("DEBUG: Detected function signature in first line. Attempting to strip it.")
+           logging.debug("Detected function signature in first line. Attempting to strip it.")
            
            # Calculate indentation of the def
            def_indent = len(first_line) - len(first_line.lstrip())
@@ -114,7 +115,7 @@ def _trim_function_body(generated_code: str) -> str:
                            # Dedent this segment
                            segment_str = '\n'.join(body_segment)
                            dedented = textwrap.dedent(segment_str)
-                           print("DEBUG: Successfully extracted body from nested function.")
+                           logging.debug("Successfully extracted body from nested function.")
                            generated_code = dedented
                            lines = generated_code.splitlines()
                            first_line_idx = next((i for i, line in enumerate(lines) if line.strip()), None)
@@ -122,7 +123,7 @@ def _trim_function_body(generated_code: str) -> str:
                                first_line = lines[first_line_idx]
                            break
            except SyntaxError:
-               print("DEBUG: Failed to parse potential function definition, treating as body.")
+               logging.debug("Failed to parse potential function definition, treating as body.")
 
       # Re-calculate indentation after potential stripping
       initial_indent = len(first_line) - len(first_line.lstrip())
@@ -145,7 +146,7 @@ def _trim_function_body(generated_code: str) -> str:
 
   code = f'def fake_function_header():\n' + textwrap.indent(generated_code, '  ')
   
-  print(f"DEBUG: Wrapped code for parsing:\n{code}")
+  logging.debug("Wrapped code for parsing:\n%s", code)
 
   tree = None
   
@@ -161,7 +162,7 @@ def _trim_function_body(generated_code: str) -> str:
   
   # Try 2: If failed, try to fix inconsistent indentation (replace 4 spaces with 2 spaces)
   if tree is None:
-      print("DEBUG: Parse failed, attempting indentation fix...")
+      logging.debug("Parse failed, attempting indentation fix...")
       
       # Strategy: Quantize indentation to multiples of 2
       fixed_lines = []
@@ -187,18 +188,18 @@ def _trim_function_body(generated_code: str) -> str:
       tree = _attempt_parse(fixed_code)
       if tree is not None:
           code = fixed_code
-          print("DEBUG: Indentation fix successful (4->2)")
+          logging.debug("Indentation fix successful (4->2)")
 
   # Try 3: Repair loop for specific lines (Issue 2)
   if tree is None:
-      print("DEBUG: Parse failed, entering repair loop...")
+      logging.debug("Parse failed, entering repair loop...")
       current_code = code
       max_repairs = 5
       for attempt in range(max_repairs):
           try:
               tree = ast.parse(current_code)
               code = current_code
-              print(f"DEBUG: Repair successful on attempt {attempt}")
+              logging.debug("Repair successful on attempt %d", attempt)
               break
           except SyntaxError as e:
               # Try to fix the specific line
@@ -213,7 +214,7 @@ def _trim_function_body(generated_code: str) -> str:
               bad_line_idx = lineno - 1
               bad_line = lines[bad_line_idx]
               
-              print(f"DEBUG: SyntaxError at line {lineno}: {bad_line.strip()}")
+              logging.debug("SyntaxError at line %s: %s", lineno, bad_line.strip())
               
               # Heuristic: Dedent the line if it looks like control flow
               # (e.g. 'if', 'else', 'elif', 'return', 'for') that might be mis-indented
@@ -225,7 +226,7 @@ def _trim_function_body(generated_code: str) -> str:
                   new_line = ' ' * (indent - 2) + stripped
                   lines[bad_line_idx] = new_line
                   current_code = '\n'.join(lines)
-                  print(f"DEBUG: Attempting to dedent line {lineno}")
+                  logging.debug("Attempting to dedent line %s", lineno)
               else:
                   # Can't dedent further, break to truncation
                   break
@@ -236,19 +237,19 @@ def _trim_function_body(generated_code: str) -> str:
     try:
       tree = ast.parse(code)
     except SyntaxError as e:
-      print(f"DEBUG: SyntaxError at line {e.lineno}, truncating...")
+      logging.debug("SyntaxError at line %s, truncating...", e.lineno)
       code = '\n'.join(code.splitlines()[:e.lineno - 1])
   if not code:
     # Nothing could be saved from `generated_code`
-    print("DEBUG: Code became empty after truncation")
+    logging.debug("Code became empty after truncation")
     return ''
 
   visitor = _FunctionLineVisitor('fake_function_header')
   visitor.visit(tree)
-  print(f"DEBUG: Function end line detected: {visitor.function_end_line}")
+  logging.debug("Function end line detected: %s", visitor.function_end_line)
   
   body_lines = code.splitlines()[1:visitor.function_end_line]
-  print(f"DEBUG: Extracted body lines:\n{body_lines}")
+  logging.debug("Extracted body lines:\n%s", body_lines)
   
   # Normalize indentation to 2 spaces
   body = '\n'.join(body_lines)
@@ -307,7 +308,7 @@ def _run_in_subprocess(program: str, function_name: str, test_input: Any, queue:
                     pass
     except ValueError as e:
       if "The truth value of an array" in str(e):
-         print(f"Caught ValueError in user code: {e}")
+         logging.debug("Caught ValueError in user code: %s", e)
          result = None
       else:
          raise e
