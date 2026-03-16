@@ -70,3 +70,19 @@ class Config:
   early_stop_patience: int = -1  # 早停的条件
   result_dir: str = "result"
   problem: str = "admissible"  # Problem name for result subdir: {problem}_{unix_timestamp}
+
+  # Sample efficiency options（全关）
+  progressive_eval: bool = False
+  stage1_timeout: int = 5
+  stage1_score_threshold_pct: float = 0.0  # 0 = 仅通过即可
+
+  functional_dedup: bool = False
+  dedup_tier1_only: bool = False  # 仅语法级去重，不做功能级检测
+
+  adaptive_sampling: bool = False
+  min_samples_per_prompt: int = 2
+  max_samples_per_prompt: int = 4
+  reduce_after_no_improve: int = 3
+
+  weighted_island_sampling: bool = False
+  feedback_in_prompt: bool = False

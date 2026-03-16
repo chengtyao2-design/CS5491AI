@@ -81,10 +81,12 @@ class ProgramsDatabase:
       config: config_lib.ProgramsDatabaseConfig,
       template: code_manipulation.Program,
       function_to_evolve: str,
+      config_full: Any = None,
   ) -> None:
     self._config: config_lib.ProgramsDatabaseConfig = config
     self._template: code_manipulation.Program = template
     self._function_to_evolve: str = function_to_evolve
+    self._config_full: Any = config_full
 
     # Initialize empty islands.
     self._islands: list[Island] = []
@@ -102,11 +104,64 @@ class ProgramsDatabase:
 
     self._last_reset_time: float = time.time()
     self._reset_count: int = 0
+    self._recent_failures: list[tuple[str, str]] = []
+
+    # Efficiency stats for sample-efficient reporting
+    self._eff_samples_attempted: int = 0
+    self._eff_full_evaluations: int = 0
+    self._eff_skipped: dict[str, int] = {}
+
+  def record_sample_attempted(self) -> None:
+    """Record that a sample was sent to the evaluator."""
+    self._eff_samples_attempted += 1
+
+  def record_skip(self, reason: str) -> None:
+    """Record that a sample was skipped (early return) for the given reason."""
+    self._eff_skipped[reason] = self._eff_skipped.get(reason, 0) + 1
+
+  def record_full_eval(self) -> None:
+    """Record that a sample completed full evaluation and was registered."""
+    self._eff_full_evaluations += 1
+
+  def get_efficiency_stats(self) -> dict[str, Any]:
+    """Return a read-only copy of efficiency statistics."""
+    return {
+        "samples_attempted": self._eff_samples_attempted,
+        "full_evaluations": self._eff_full_evaluations,
+        "skipped": dict(self._eff_skipped),
+    }
+
+  def record_failure(self, code_snippet: str, reason: str) -> None:
+    """Record a rejected sample for feedback-in-prompt."""
+    flat = code_snippet.replace('\n', ' ').strip()
+    snippet = (flat[:200] + "...") if len(flat) > 200 else flat
+    self._recent_failures.append((snippet, reason))
+    if len(self._recent_failures) > 2:
+      self._recent_failures.pop(0)
 
   def get_prompt(self) -> Prompt:
     """Returns a prompt containing implementations from one chosen island."""
-    island_id = np.random.randint(len(self._islands))
+    if (
+        self._config_full is not None
+        and getattr(self._config_full, 'weighted_island_sampling', False)
+    ):
+      scores = np.array(self._best_score_per_island)
+      scores = np.where(np.isfinite(scores), scores, -1e9)
+      probs = scipy.special.softmax(scores)
+      island_id = int(np.random.choice(len(self._islands), p=probs))
+    else:
+      island_id = np.random.randint(len(self._islands))
     code, version_generated = self._islands[island_id].get_prompt()
+    if (
+        self._config_full is not None
+        and getattr(self._config_full, 'feedback_in_prompt', False)
+        and self._recent_failures
+    ):
+      feedback_lines = []
+      for snippet, reason in self._recent_failures[-2:]:
+        short = (snippet[:100] + "...") if len(snippet) > 100 else snippet
+        feedback_lines.append(f"# Rejected (reason: {reason}):\n# {short}")
+      code = code + "\n\n" + "\n".join(feedback_lines)
     return Prompt(code, version_generated, island_id)
 
   def get_global_best_score(self) -> float:

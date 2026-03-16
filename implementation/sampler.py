@@ -22,6 +22,7 @@ import os
 import time
 from collections.abc import Collection, Sequence
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from openai import OpenAI
@@ -88,9 +89,10 @@ class LLM:
                 print("Max retries reached. Stopping execution.")
                 raise e
 
-  def draw_samples(self, prompt: str) -> Collection[str]:
+  def draw_samples(self, prompt: str, n: int | None = None) -> Collection[str]:
     """Returns multiple predicted continuations of `prompt`."""
-    return [self._draw_sample(prompt) for _ in range(self._samples_per_prompt)]
+    count = n if n is not None else self._samples_per_prompt
+    return [self._draw_sample(prompt) for _ in range(count)]
 
 
 class Sampler:
@@ -108,6 +110,7 @@ class Sampler:
       problem: str = "admissible",
       template: code_manipulation.Program | None = None,
       function_to_evolve: str = "",
+      config: Any = None,
   ) -> None:
     self._database = database
     self._evaluators = evaluators
@@ -118,6 +121,8 @@ class Sampler:
     self._problem = problem
     self._template = template
     self._function_to_evolve = function_to_evolve
+    self._config = config
+    self._base_samples_per_prompt = samples_per_prompt
     self._start_time = time.time()
     self._global_best_history: list[float] = []
     self._per_instance_score_history: list[dict[str, float]] = []
@@ -125,12 +130,26 @@ class Sampler:
     self._last_improvement_iter = 0
     self._total_iterations = 0
 
+  def _get_adaptive_samples_count(self, iteration: int) -> int:
+    """Return samples_per_prompt, possibly reduced when no improvement."""
+    if not self._config or not getattr(self._config, 'adaptive_sampling', False):
+      return self._base_samples_per_prompt
+    no_improve = iteration - self._last_improvement_iter
+    threshold = getattr(self._config, 'reduce_after_no_improve', 3)
+    if no_improve >= threshold:
+      return getattr(self._config, 'min_samples_per_prompt', 2)
+    return min(
+        getattr(self._config, 'max_samples_per_prompt', 4),
+        self._base_samples_per_prompt,
+    )
+
   def sample(self) -> None:
     """Continuously gets prompts, samples programs, sends them for analysis."""
     iteration = 0
     while self._max_iterations == -1 or iteration < self._max_iterations:
       prompt = self._database.get_prompt()
-      samples = self._llm.draw_samples(prompt.code)
+      n_samples = self._get_adaptive_samples_count(iteration)
+      samples = self._llm.draw_samples(prompt.code, n=n_samples)
       # This loop can be executed in parallel on remote evaluator machines.
       for sample in samples:
         chosen_evaluator = np.random.choice(self._evaluators)
@@ -196,6 +215,18 @@ class Sampler:
           global_best_score, " (NEW!)" if new_global_best else "",
           active_islands, num_islands, elapsed_seconds,
           self._database._reset_count, prompt.version_generated,
+      )
+      
+      # Efficiency metrics (console output)
+      eff = self._database.get_efficiency_stats()
+      total_tokens = self._llm.total_tokens_used
+      full_evals = eff["full_evaluations"]
+      score_pt = round(global_best_score / total_tokens, 6) if total_tokens > 0 else "N/A"
+      score_pe = round(global_best_score / full_evals, 6) if full_evals > 0 else "N/A"
+      logging.info(
+          "Efficiency: samples_attempted=%d | full_evaluations=%d | skipped=%s | "
+          "score_per_token=%s | score_per_evaluation=%s",
+          eff["samples_attempted"], full_evals, eff["skipped"], score_pt, score_pe,
       )
       
       # Cluster stats
@@ -358,6 +389,22 @@ class Sampler:
           avg_gap_history.append(None)
       final_data["avg_gap_history"] = avg_gap_history
     
+    # Efficiency metrics
+    eff = self._database.get_efficiency_stats()
+    total_tokens = self._llm.total_tokens_used
+    full_evaluations = eff["full_evaluations"]
+    final_data["efficiency"] = {
+        "samples_attempted": eff["samples_attempted"],
+        "full_evaluations": full_evaluations,
+        "skipped": eff["skipped"],
+        "score_per_token": (
+            round(global_best / total_tokens, 6) if total_tokens > 0 else None
+        ),
+        "score_per_evaluation": (
+            round(global_best / full_evaluations, 6) if full_evaluations > 0 else None
+        ),
+    }
+    
     # 2b. Save optimal comparison chart (when we have optimal_comparison data)
     if optimal_comparison:
       try:
@@ -454,6 +501,26 @@ class Sampler:
         f.write(f"- **Best Island**: {best_program_info[1]}\n")
       f.write("\n## Score Progression\n\n")
       f.write("See `score_progression.png` for the visualization.\n")
+      eff = self._database.get_efficiency_stats()
+      total_tokens = self._llm.total_tokens_used
+      full_evaluations = eff["full_evaluations"]
+      f.write("\n## Sample Efficiency\n\n")
+      f.write("| Metric | Value |\n")
+      f.write("|--------|-------|\n")
+      f.write(f"| Samples Attempted | {eff['samples_attempted']} |\n")
+      f.write(f"| Full Evaluations | {full_evaluations} |\n")
+      score_pt = (
+          round(global_best / total_tokens, 6) if total_tokens > 0 else "N/A"
+      )
+      score_pe = (
+          round(global_best / full_evaluations, 6) if full_evaluations > 0 else "N/A"
+      )
+      f.write(f"| Score per Token | {score_pt} |\n")
+      f.write(f"| Score per Evaluation | {score_pe} |\n")
+      if eff["skipped"]:
+        f.write("\n### Skipped Breakdown\n\n")
+        for reason, count in sorted(eff["skipped"].items()):
+          f.write(f"- {reason}: {count}\n")
       if optimal_comparison:
         f.write("\n## Optimal Comparison\n\n")
         f.write("| Instance | Tour Length | Optimal | Gap (%) |\n")
@@ -464,4 +531,18 @@ class Sampler:
         f.write("See `optimal_comparison.png` and `gap_progression.png` for the visualizations.\n")
     
     logging.info("Results saved to %s (model: %s)", out_dir, llm_model)
+    
+    # Print all efficiency metrics to console (eff, total_tokens, etc. from above)
+    logging.info("=== Sample Efficiency (Final) ===")
+    logging.info("  Samples Attempted: %d", eff["samples_attempted"])
+    logging.info("  Full Evaluations: %d", full_evaluations)
+    logging.info("  Score per Token: %s", score_pt)
+    logging.info("  Score per Evaluation: %s", score_pe)
+    if eff["skipped"]:
+      logging.info("  Skipped Breakdown:")
+      for reason, count in sorted(eff["skipped"].items()):
+        logging.info("    - %s: %d", reason, count)
+    else:
+      logging.info("  Skipped Breakdown: (none)")
+    
     return out_dir

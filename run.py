@@ -57,6 +57,24 @@ if __name__ == '__main__':
         default=None,
         help='Seeds for random instances; must match --random count if provided',
     )
+    parser.add_argument(
+        '--no-functional-dedup',
+        action='store_true',
+        help='Disable functional duplicate detection',
+    )
+    grp_prog = parser.add_mutually_exclusive_group()
+    grp_prog.add_argument('--progressive-eval', dest='progressive_eval', action='store_true', help='Enable progressive (staged) evaluation')
+    grp_prog.add_argument('--no-progressive-eval', dest='progressive_eval', action='store_false')
+    grp_adapt = parser.add_mutually_exclusive_group()
+    grp_adapt.add_argument('--adaptive-sampling', dest='adaptive_sampling', action='store_true', help='Enable adaptive samples_per_prompt')
+    grp_adapt.add_argument('--no-adaptive-sampling', dest='adaptive_sampling', action='store_false')
+    grp_weight = parser.add_mutually_exclusive_group()
+    grp_weight.add_argument('--weighted-island', dest='weighted_island', action='store_true', help='Enable weighted island selection')
+    grp_weight.add_argument('--no-weighted-island', dest='weighted_island', action='store_false')
+    grp_fb = parser.add_mutually_exclusive_group()
+    grp_fb.add_argument('--feedback-in-prompt', dest='feedback_in_prompt', action='store_true', help='Include rejected sample feedback in prompts')
+    grp_fb.add_argument('--no-feedback-in-prompt', dest='feedback_in_prompt', action='store_false')
+    parser.set_defaults(progressive_eval=None, adaptive_sampling=None, weighted_island=None, feedback_in_prompt=None)
     args = parser.parse_args()
 
     print(f"Running FunSearch from: {ROOT_DIR}")
@@ -101,15 +119,26 @@ if __name__ == '__main__':
         with open(SPEC_FILE, 'r') as f:
             specification_content = f.read()
 
+        base_cfg = config_lib.Config()
         default_config = dataclasses.replace(
-            config_lib.Config(),
+            base_cfg,
             goal_description=goal_description,
             problem=args.problem,
+            functional_dedup=False if args.no_functional_dedup else base_cfg.functional_dedup,
+            progressive_eval=base_cfg.progressive_eval if args.progressive_eval is None else args.progressive_eval,
+            adaptive_sampling=base_cfg.adaptive_sampling if args.adaptive_sampling is None else args.adaptive_sampling,
+            weighted_island_sampling=base_cfg.weighted_island_sampling if args.weighted_island is None else args.weighted_island,
+            feedback_in_prompt=base_cfg.feedback_in_prompt if args.feedback_in_prompt is None else args.feedback_in_prompt,
         )
 
         llm_model = os.getenv("LLM_MODEL", "arcee-ai/trinity-large-preview:free")
         print(f"Problem: {args.problem}")
         print(f"LLM Model: {llm_model}")
+        print("Sample Efficiency Config:")
+        print(f"  functional_dedup={default_config.functional_dedup}, dedup_tier1_only={default_config.dedup_tier1_only}")
+        print(f"  progressive_eval={default_config.progressive_eval}, stage1_timeout={default_config.stage1_timeout}, stage1_score_threshold_pct={default_config.stage1_score_threshold_pct}")
+        print(f"  adaptive_sampling={default_config.adaptive_sampling}, min_samples={default_config.min_samples_per_prompt}, max_samples={default_config.max_samples_per_prompt}, reduce_after_no_improve={default_config.reduce_after_no_improve}")
+        print(f"  weighted_island_sampling={default_config.weighted_island_sampling}, feedback_in_prompt={default_config.feedback_in_prompt}")
         print(f"Specification: {SPEC_FILE.name}")
         print(f"Test Inputs: {len(test_inputs)} instance(s)")
         if args.problem == 'tsp':

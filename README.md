@@ -73,6 +73,11 @@ cp .env.example .env
 |------|------|--------|
 | `--problem` | 问题类型：`tsp` 或 `admissible` | `admissible` |
 | `--tsplib` | TSPLib .tsp 文件路径（可多个） | 无，使用随机实例 |
+| `--no-functional-dedup` | 禁用功能级重复检测 | 默认启用 |
+| `--progressive-eval` | 启用渐进式评估（先小实例筛选） | 默认禁用 |
+| `--adaptive-sampling` | 启用自适应采样（无改进时减少样本） | 默认禁用 |
+| `--weighted-island` | 启用加权岛屿选择 | 默认禁用 |
+| `--feedback-in-prompt` | 在 prompt 中注入失败样本反馈 | 默认禁用 |
 
 ### 配置项（implementation/config.py）
 
@@ -86,6 +91,12 @@ cp .env.example .env
 | `result_dir` | 结果输出目录 | `result` |
 | `programs_database.num_islands` | 岛屿数量 | 10 |
 | `programs_database.reset_period` | 岛屿重置周期（秒） | 600 |
+| `functional_dedup` | 功能级重复检测（Tier1 语法 + Tier2 执行输出） | True |
+| `dedup_tier1_only` | 仅 Tier1 语法去重，不做 Tier2 | False |
+| `progressive_eval` | 渐进式评估 | False |
+| `adaptive_sampling` | 自适应采样 | False |
+| `weighted_island_sampling` | 加权岛屿选择 | False |
+| `feedback_in_prompt` | 失败反馈注入 prompt | False |
 
 ## 使用方法
 
@@ -108,6 +119,16 @@ python run.py --problem tsp --tsplib path/to/att48.tsp path/to/eil51.tsp
 ```bash
 python run.py --problem admissible
 ```
+
+### Sample-efficient 模式（减少评估与 LLM 调用）
+
+```bash
+# 启用全部样本效率优化
+python run.py --problem tsp --tsplib data/tsplib/eil51.tsp \
+  --progressive-eval --adaptive-sampling --weighted-island --feedback-in-prompt
+```
+
+功能级重复检测（`functional_dedup`）默认开启：Tier1 按代码 hash 去重，TSP 下 Tier2 按 tour 签名去重，避免对功能等价程序重复评估。
 
 ### 调试模式（显示 prompt 等 DEBUG 日志）
 

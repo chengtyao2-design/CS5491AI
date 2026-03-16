@@ -24,6 +24,7 @@ from implementation import config as config_lib
 from implementation import evaluator
 from implementation import programs_database
 from implementation import sampler
+from implementation.functional_dedup import FunctionalDedupCache
 
 
 def _extract_function_names(specification: str) -> tuple[str, str]:
@@ -45,7 +46,13 @@ def main(specification: str, inputs: Sequence[Any], config: config_lib.Config):
 
   template = code_manipulation.text_to_program(specification)
   database = programs_database.ProgramsDatabase(
-      config.programs_database, template, function_to_evolve)
+      config.programs_database, template, function_to_evolve, config_full=config)
+
+  dedup_cache = (
+      FunctionalDedupCache(tier1_only=config.dedup_tier1_only)
+      if config.functional_dedup
+      else None
+  )
 
   evaluators = []
   for _ in range(config.num_evaluators):
@@ -55,6 +62,8 @@ def main(specification: str, inputs: Sequence[Any], config: config_lib.Config):
         function_to_evolve,
         function_to_run,
         inputs,
+        config=config,
+        dedup_cache=dedup_cache,
     ))
   # We send the initial implementation to be analysed by one of the evaluators.
   initial = template.get_function(function_to_evolve).body
@@ -75,6 +84,7 @@ def main(specification: str, inputs: Sequence[Any], config: config_lib.Config):
           problem=config.problem,
           template=template,
           function_to_evolve=function_to_evolve,
+          config=config,
       )
       for _ in range(config.num_samplers)
   ]
