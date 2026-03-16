@@ -51,10 +51,22 @@ class Config:
         can execute in parallel as part of a distributed system.
     samples_per_prompt: How many independently sampled program continuations to
         obtain for each prompt.
+    goal_description: Problem-specific goal text for LLM prompts (e.g. TSP vs
+        admissible set).
+    early_stop_patience: Number of iterations without improvement before early
+        stopping. Set to -1 to disable.
+    result_dir: Directory for saving experiment results (score plots, best
+        program, etc.).
   """
   programs_database: ProgramsDatabaseConfig = dataclasses.field(
       default_factory=ProgramsDatabaseConfig)
-  num_samplers: int = 15
+  num_samplers: int = 1
   num_evaluators: int = 140
   samples_per_prompt: int = 4
   iterations: int = 50
+  goal_description: str = (
+      "maximize the size of the admissible set"
+  )
+  early_stop_patience: int = -1  # 早停的条件
+  result_dir: str = "result"
+  problem: str = "admissible"  # Problem name for result subdir: {problem}_{unix_timestamp}

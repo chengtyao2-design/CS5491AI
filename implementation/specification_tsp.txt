@@ -1,0 +1,103 @@
+"""TSP solver using greedy construction with evolvable priority heuristic."""
+import numpy as np
+
+
+class funsearch:
+  """Decorator stubs for FunSearch (no-op)."""
+  @staticmethod
+  def run(f):
+    return f
+  @staticmethod
+  def evolve(f):
+    return f
+
+
+def _calc_insert_cost(D, prv, nxt, ins):
+  """Insertion cost of inserting city ins between prv and nxt."""
+  return D[prv, ins] + D[ins, nxt] - D[prv, nxt]
+
+
+def _safe_priority_score(s):
+  """Convert priority() output to float; use -inf for None/NaN so argmax skips invalid."""
+  if s is None:
+    return float('-inf')
+  try:
+    v = float(s)
+    return v if np.isfinite(v) else float('-inf')
+  except (TypeError, ValueError):
+    return float('-inf')
+
+
+def solve(instance):
+  """Build a TSP tour via greedy construction with cheapest insertion.
+
+  At each step, select the next city using priority() and insert it at the
+  position that minimizes the increase in tour length.
+
+  Args:
+    instance: TSPInstance with .instance_id and .dist_matrix (n x n).
+
+  Returns:
+    Tour as list of city indices (length n).
+  """
+  D = instance.dist_matrix
+  n = D.shape[0]
+
+  unvisited = np.ones(n, dtype=bool)
+  tour = []
+
+  for step in range(n):
+    feas_ind = np.flatnonzero(unvisited)
+    if step == 0:
+      city = 0
+    else:
+      scores = np.array([
+          _safe_priority_score(priority(city_idx, tour, unvisited, D))
+          for city_idx in feas_ind
+      ], dtype=float)
+      best_idx = np.argmax(scores)
+      city = feas_ind[best_idx]
+
+    unvisited[city] = False
+
+    if len(tour) == 0:
+      tour.append(city)
+    else:
+      insert_costs = np.array([
+          _calc_insert_cost(D, tour[i], tour[(i + 1) % len(tour)], city)
+          for i in range(len(tour))
+      ])
+      best_insert = np.argmin(insert_costs)
+      tour.insert(best_insert + 1, city)
+
+  tour_length = sum(
+      D[tour[i], tour[(i + 1) % n]] for i in range(n)
+  )
+  return tour, tour_length
+
+
+@funsearch.run
+def evaluate(instance):
+  """Returns negative tour length (higher is better for FunSearch)."""
+  _, tour_length = solve(instance)
+  return -float(tour_length)
+
+
+@funsearch.evolve
+def priority(city_idx, current_tour, unvisited_mask, dist_matrix):
+  """Scores a candidate city for greedy selection.
+
+  Baseline: nearest-neighbor heuristic (prefer city closest to the tour).
+  Higher score = more preferred. Try farthest insertion, regret-based, etc.
+
+  Args:
+    city_idx: Index of the candidate city.
+    current_tour: List of already visited city indices.
+    unvisited_mask: Boolean array, True for unvisited cities.
+    dist_matrix: n x n distance matrix.
+
+  Returns:
+    A score; higher means this city is preferred as the next to add.
+  """
+  min_d = np.min(dist_matrix[city_idx, current_tour])
+  return -min_d
