@@ -57,4 +57,4 @@ class Config:
   num_samplers: int = 15
   num_evaluators: int = 140
   samples_per_prompt: int = 4
-  iterations: int = 50
+  iterations: int = 1000
