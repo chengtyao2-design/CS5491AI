@@ -166,6 +166,10 @@ class Sampler:
       if not self._global_best_history or global_best_score > max(self._global_best_history):
         self._last_improvement_iter = iteration
       self._global_best_history.append(global_best_score)
+
+      # Notify database of no-improvement count for adaptive temperature
+      no_improve = iteration - self._last_improvement_iter
+      self._database.notify_no_improve(no_improve)
       
       # Record per-instance score and gap history (best so far each iteration)
       best_program_info = self._database.get_global_best_program()

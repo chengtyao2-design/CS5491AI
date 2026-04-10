@@ -124,9 +124,14 @@ class ProgramVisitor(ast.NodeVisitor):
       body_start_line = node.body[0].lineno - 1
       # Extract the docstring.
       docstring = None
-      if isinstance(node.body[0], ast.Expr) and isinstance(node.body[0].value,
-                                                           ast.Str):
-        docstring = f'  """{ast.literal_eval(ast.unparse(node.body[0]))}"""'
+      first = node.body[0]
+      doc_literal = None
+      if isinstance(first, ast.Expr):
+        v = first.value
+        if isinstance(v, ast.Constant) and isinstance(v.value, str):
+          doc_literal = v.value
+      if doc_literal is not None:
+        docstring = f'  """{doc_literal}"""'
         if len(node.body) > 1:
           body_start_line = node.body[1].lineno - 1
         else:

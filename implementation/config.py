@@ -34,7 +34,7 @@ class ProgramsDatabaseConfig:
   num_islands: int = 10
   reset_period: int = 10 * 60
   cluster_sampling_temperature_init: float = 0.1
-  cluster_sampling_temperature_period: int = 30_000
+  cluster_sampling_temperature_period: int = 50
 
 
 @dataclasses.dataclass(frozen=True)
@@ -85,4 +85,10 @@ class Config:
   reduce_after_no_improve: int = 3
 
   weighted_island_sampling: bool = False
+  island_sampling_temperature: float = 1.0  # softmax T for weighted island selection; higher = more uniform
   feedback_in_prompt: bool = False
+
+  # Adaptive temperature: reheat cluster sampling when stuck in local optima
+  adaptive_temperature: bool = False
+  reheat_after_no_improve: int = 5        # iterations without improvement before reheat
+  reheat_temperature_multiplier: float = 3.0  # multiply cluster init temperature by this factor when reheating

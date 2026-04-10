@@ -30,9 +30,47 @@ from implementation import config as config_lib
 Signature = tuple[float, ...]
 ScoresPerTest = Mapping[Any, float]
 
+# #region agent log
+def _agent_dbg(msg: str, hypothesis_id: str, data: dict) -> None:
+  import json as _json
+  try:
+    with open(
+        "/Users/yangkefan/Documents/projects/CS5491AI/.cursor/debug-60277f.log",
+        "a",
+        encoding="utf-8",
+    ) as _f:
+      _f.write(
+          _json.dumps(
+              {
+                  "sessionId": "60277f",
+                  "hypothesisId": hypothesis_id,
+                  "location": "programs_database",
+                  "message": msg,
+                  "data": data,
+                  "timestamp": int(time.time() * 1000),
+              },
+              ensure_ascii=False,
+          )
+          + "\n"
+      )
+  except Exception:
+    pass
+# #endregion
+
 
 def _softmax(logits: np.ndarray, temperature: float) -> np.ndarray:
   """Returns the tempered softmax of 1D finite `logits`."""
+  # #region agent log
+  _agent_dbg(
+      "_softmax entry",
+      "H1",
+      {
+          "logits_shape": [int(x) for x in np.shape(logits)],
+          "logits_size": int(np.size(logits)),
+          "temperature": float(temperature),
+      },
+  )
+  # #endregion
   if not np.all(np.isfinite(logits)):
     non_finites = set(logits[~np.isfinite(logits)])
     raise ValueError(f'`logits` contains non-finite value(s): {non_finites}')
@@ -105,6 +143,7 @@ class ProgramsDatabase:
     self._last_reset_time: float = time.time()
     self._reset_count: int = 0
     self._recent_failures: list[tuple[str, str]] = []
+    self._no_improve_count: int = 0
 
     # Efficiency stats for sample-efficient reporting
     self._eff_samples_attempted: int = 0
@@ -131,6 +170,10 @@ class ProgramsDatabase:
         "skipped": dict(self._eff_skipped),
     }
 
+  def notify_no_improve(self, count: int) -> None:
+    """Called by Sampler each iteration to update the no-improvement counter."""
+    self._no_improve_count = count
+
   def record_failure(self, code_snippet: str, reason: str) -> None:
     """Record a rejected sample for feedback-in-prompt."""
     flat = code_snippet.replace('\n', ' ').strip()
@@ -145,13 +188,25 @@ class ProgramsDatabase:
         self._config_full is not None
         and getattr(self._config_full, 'weighted_island_sampling', False)
     ):
-      scores = np.array(self._best_score_per_island)
+      scores = np.array(self._best_score_per_island, dtype=np.float32)
       scores = np.where(np.isfinite(scores), scores, -1e9)
-      probs = scipy.special.softmax(scores)
+      island_temp = float(getattr(self._config_full, 'island_sampling_temperature', 1.0))
+      probs = _softmax(scores, island_temp)
       island_id = int(np.random.choice(len(self._islands), p=probs))
     else:
       island_id = np.random.randint(len(self._islands))
-    code, version_generated = self._islands[island_id].get_prompt()
+    # Compute adaptive temperature multiplier for cluster sampling
+    temp_multiplier = 1.0
+    if (
+        self._config_full is not None
+        and getattr(self._config_full, 'adaptive_temperature', False)
+    ):
+      reheat_threshold = int(getattr(self._config_full, 'reheat_after_no_improve', 5))
+      reheat_mult = float(getattr(self._config_full, 'reheat_temperature_multiplier', 3.0))
+      if self._no_improve_count >= reheat_threshold:
+        temp_multiplier = reheat_mult
+
+    code, version_generated = self._islands[island_id].get_prompt(temp_multiplier)
     if (
         self._config_full is not None
         and getattr(self._config_full, 'feedback_in_prompt', False)
@@ -236,6 +291,18 @@ class ProgramsDatabase:
       founder_island_id = np.random.choice(keep_islands_ids)
       founder = self._best_program_per_island[founder_island_id]
       founder_scores = self._best_scores_per_test_per_island[founder_island_id]
+      # #region agent log
+      _agent_dbg(
+          "reset_islands founder",
+          "H5",
+          {
+              "reset_island_id": island_id,
+              "founder_island_id": int(founder_island_id),
+              "founder_is_none": founder is None,
+              "founder_scores_is_none": founder_scores is None,
+          },
+      )
+      # #endregion
       self._register_program_in_island(founder, island_id, founder_scores)
 
 
@@ -274,16 +341,29 @@ class Island:
       self._clusters[signature].register_program(program)
     self._num_programs += 1
 
-  def get_prompt(self) -> tuple[str, int]:
+  def get_prompt(self, temperature_multiplier: float = 1.0) -> tuple[str, int]:
     """Constructs a prompt containing functions from this island."""
     signatures = list(self._clusters.keys())
     cluster_scores = np.array(
         [self._clusters[signature].score for signature in signatures])
 
+    # #region agent log
+    _agent_dbg(
+        "Island.get_prompt pre-softmax",
+        "H1",
+        {
+            "n_clusters": len(self._clusters),
+            "cluster_scores_size": int(np.size(cluster_scores)),
+            "num_programs": self._num_programs,
+        },
+    )
+    # #endregion
+
     # Convert scores to probabilities using softmax with temperature schedule.
+    # temperature_multiplier > 1 reheats (more exploration) when stuck.
     period = self._cluster_sampling_temperature_period
     temperature = self._cluster_sampling_temperature_init * (
-        1 - (self._num_programs % period) / period)
+        1 - (self._num_programs % period) / period) * temperature_multiplier
     probabilities = _softmax(cluster_scores, temperature)
 
     # At the beginning of an experiment when we have few clusters, place fewer

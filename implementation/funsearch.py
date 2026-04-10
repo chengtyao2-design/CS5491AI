@@ -69,6 +69,18 @@ def main(specification: str, inputs: Sequence[Any], config: config_lib.Config):
   initial = template.get_function(function_to_evolve).body
   evaluators[0].analyse(initial, island_id=None, version_generated=None)
 
+  # #region agent log
+  programs_database._agent_dbg(
+      "post initial analyse island state",
+      "H2",
+      {
+          "clusters_per_island": [
+              len(isl._clusters) for isl in database._islands
+          ],
+      },
+  )
+  # #endregion
+
   result_dir = Path(config.result_dir)
   result_dir.mkdir(parents=True, exist_ok=True)
 

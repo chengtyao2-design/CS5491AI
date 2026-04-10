@@ -5,3 +5,4 @@ openai>=1.0
 python-dotenv>=1.0
 matplotlib>=3.5
 tsplib95>=0.7
+jupyter>=1.0
