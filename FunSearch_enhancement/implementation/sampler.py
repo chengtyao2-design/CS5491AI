@@ -98,6 +98,8 @@ class LLM:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
+                max_tokens=2048,   # <--- 【关键新增1】给足大模型说话的字数额度！
+                temperature=0.9,   # <--- 【关键新增2】提高温度，让它写出更多样化的数学组合
             )
             if resp.usage:
                 LLM._total_tokens_used += resp.usage.total_tokens
