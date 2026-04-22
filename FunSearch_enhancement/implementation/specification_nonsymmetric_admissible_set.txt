@@ -72,6 +72,13 @@ def solve(n: int, w: int) -> np.ndarray:
                                         axis=0)
   return max_admissible_set
 
+@funsearch.run
+def evaluate(set_description: tuple[int, int]) -> int:
+  """Returns the size of the constructed admissible set."""
+  n, w = set_description
+  admissible_set = solve(n, w)
+  return len(admissible_set)
+
 
 @funsearch.evolve
 def priority(el: tuple[int, ...], n: int, w: int) -> float:
@@ -91,3 +98,5 @@ def priority(el: tuple[int, ...], n: int, w: int) -> float:
   3. Try using non-linear math (e.g., combinations, exponential decays, or weighted sums) to compute the score.
   """
   return 0.0
+
+
