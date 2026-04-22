@@ -73,14 +73,6 @@ def solve(n: int, w: int) -> np.ndarray:
   return max_admissible_set
 
 
-@funsearch.run
-def evaluate(set_description: tuple[int, int]) -> int:
-  """Returns the size of the constructed admissible set."""
-  n, w = set_description
-  admissible_set = solve(n, w)
-  return len(admissible_set)
-
-
 @funsearch.evolve
 def priority(el: tuple[int, ...], n: int, w: int) -> float:
   """Trivial scoring function.
@@ -92,5 +84,10 @@ def priority(el: tuple[int, ...], n: int, w: int) -> float:
 
   Returns:
     A number reflecting the priority with which we want to add `el` to the set.
+    
+  INSTRUCTIONS FOR IMPROVEMENT:
+  1. Think step-by-step. Analyze the element's properties (distribution of 0s, 1s, and 2s).
+  2. Consider how to prioritize elements that will block the fewest future additions.
+  3. Try using non-linear math (e.g., combinations, exponential decays, or weighted sums) to compute the score.
   """
   return 0.0
