@@ -75,7 +75,6 @@ class LLM:
     """Returns a predicted continuation of `prompt`."""
     model = os.getenv("LLM_MODEL", "qwen/qwen-2.5-coder-32b-instruct")
     
-    # 1. 全新升级的 System Prompt：强制要求输出 Thoughts 和 Codes
     system_prompt = (
         "You are an expert algorithm designer. Your goal is to discover new, mathematically "
         "innovative heuristic functions to maximize the size of the admissible set.\n"
@@ -89,6 +88,7 @@ class LLM:
     
     user_prompt = f"Please read the following context. Provide your Thoughts, then the new function body.\n\n{prompt}"
     
+    import time
     retries = 5
     for attempt in range(retries):
         try:
@@ -98,37 +98,36 @@ class LLM:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                max_tokens=2048,   # <--- 【关键新增1】给足大模型说话的字数额度！
-                temperature=0.9,   # <--- 【关键新增2】提高温度，让它写出更多样化的数学组合
+                max_tokens=2048,   # <--- 强制解除 50 字封印
+                temperature=0.9    # <--- 让模型发散思维
             )
             if resp.usage:
                 LLM._total_tokens_used += resp.usage.total_tokens
                 
             raw_content = resp.choices[0].message.content
             
-            # 2. ---------- 核心新增：正则解析 Thoughts 和 Codes ----------
             import re
-            # 提取 ```python 和 ``` 之间的纯代码
             code_match = re.search(r'```python\s*(.*?)\s*```', raw_content, re.DOTALL)
             if code_match:
                 extracted_code = code_match.group(1)
             else:
-                # 兼容：如果 LLM 忘记写 markdown，暴力剥离常见的标记
-                extracted_code = raw_content.replace('```python', '').replace('```', '')
+                code_match_fallback = re.search(r'```\s*(.*?)\s*```', raw_content, re.DOTALL)
+                if code_match_fallback:
+                    extracted_code = code_match_fallback.group(1)
+                else:
+                    # <--- 究极兜底：没代码就返回 0.0，绝不让英文报错
+                    extracted_code = "  return 0.0"
             
-            # 容错：干掉 LLM 可能违规重复输出的 `def priority` 这一行，防止语法树崩溃
             lines = extracted_code.split('\n')
             final_lines = [line for line in lines if not line.strip().startswith('def priority')]
             final_code = '\n'.join(final_lines)
             
-            # 打印完整的思考过程和最终提取的代码，方便你在终端监控
             print("\n" + "✨" * 20)
             print(f"💭 LLM Thoughts:\n{raw_content}\n")
             print(f"💻 Extracted Executable Code:\n{final_code}")
             print("✨" * 20 + "\n")
             
             return final_code
-            # -----------------------------------------------------------
             
         except Exception as e:
             print(f"LLM API call failed (attempt {attempt+1}/{retries}): {e}")
