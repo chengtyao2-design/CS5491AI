@@ -148,8 +148,8 @@ class Sampler:
       }
       self._experiment_history.append(record)
       
-      # 每次迭代都实时写入 Google Drive，防止 Colab 突然断线导致数据丢失
-      save_path = "/content/drive/MyDrive/FunSearch_Project/experiment_data.json"
+      # 【关键修改】直接保存在当前运行目录下，不要再写 drive/MyDrive/ 了！
+      save_path = "experiment_data.json" 
       with open(save_path, "w") as f:
           json.dump(self._experiment_history, f, indent=4)
       # -----------------------------------------------
