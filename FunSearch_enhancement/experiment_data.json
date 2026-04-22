@@ -1,0 +1,102 @@
+[
+    {
+        "iteration": 1,
+        "island_id": 9,
+        "best_score": 308.5,
+        "global_best_score": 308.5,
+        "active_islands": 10,
+        "total_islands": 10,
+        "elapsed_seconds": 211,
+        "total_tokens": 2122
+    },
+    {
+        "iteration": 2,
+        "island_id": 0,
+        "best_score": 308.5,
+        "global_best_score": 308.5,
+        "active_islands": 10,
+        "total_islands": 10,
+        "elapsed_seconds": 424,
+        "total_tokens": 4162
+    },
+    {
+        "iteration": 3,
+        "island_id": 1,
+        "best_score": 312.5,
+        "global_best_score": 312.5,
+        "active_islands": 10,
+        "total_islands": 10,
+        "elapsed_seconds": 640,
+        "total_tokens": 6488
+    },
+    {
+        "iteration": 4,
+        "island_id": 9,
+        "best_score": 312.5,
+        "global_best_score": 312.5,
+        "active_islands": 10,
+        "total_islands": 10,
+        "elapsed_seconds": 805,
+        "total_tokens": 8444
+    },
+    {
+        "iteration": 5,
+        "island_id": 5,
+        "best_score": 308.5,
+        "global_best_score": 312.5,
+        "active_islands": 10,
+        "total_islands": 10,
+        "elapsed_seconds": 1105,
+        "total_tokens": 11053
+    },
+    {
+        "iteration": 6,
+        "island_id": 2,
+        "best_score": 308.5,
+        "global_best_score": 312.5,
+        "active_islands": 10,
+        "total_islands": 10,
+        "elapsed_seconds": 1239,
+        "total_tokens": 12979
+    },
+    {
+        "iteration": 7,
+        "island_id": 4,
+        "best_score": 312.5,
+        "global_best_score": 312.5,
+        "active_islands": 10,
+        "total_islands": 10,
+        "elapsed_seconds": 1398,
+        "total_tokens": 15883
+    },
+    {
+        "iteration": 8,
+        "island_id": 7,
+        "best_score": 312.5,
+        "global_best_score": 312.5,
+        "active_islands": 10,
+        "total_islands": 10,
+        "elapsed_seconds": 1530,
+        "total_tokens": 18648
+    },
+    {
+        "iteration": 9,
+        "island_id": 2,
+        "best_score": 308.5,
+        "global_best_score": 312.5,
+        "active_islands": 10,
+        "total_islands": 10,
+        "elapsed_seconds": 1801,
+        "total_tokens": 22457
+    },
+    {
+        "iteration": 10,
+        "island_id": 9,
+        "best_score": 312.5,
+        "global_best_score": 312.5,
+        "active_islands": 10,
+        "total_islands": 10,
+        "elapsed_seconds": 1917,
+        "total_tokens": 25509
+    }
+]
