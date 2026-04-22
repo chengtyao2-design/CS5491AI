@@ -74,7 +74,9 @@ class LLM:
   def _draw_sample(self, prompt: str) -> str:
     """Returns a predicted continuation of `prompt`."""
     # model = os.getenv("LLM_MODEL", "qwen/qwen-2.5-coder-32b-instruct")
-    model = "openai/gpt-4o-mini"
+    # model = "openai/gpt-4o-mini"
+    model = "anthropic/claude-3.5-sonnet"
+   
     system_prompt = (
         "You are an expert algorithm designer. Your goal is to discover new, mathematically "
         "innovative heuristic functions to maximize the size of the admissible set.\n"
