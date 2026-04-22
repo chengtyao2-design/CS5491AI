@@ -75,7 +75,7 @@ class LLM:
     """Returns a predicted continuation of `prompt`."""
     # model = os.getenv("LLM_MODEL", "qwen/qwen-2.5-coder-32b-instruct")
     # model = "openai/gpt-4o-mini"
-    model = "anthropic/claude-3.5-sonnet"
+    model = "meta-llama/llama-3.3-70b-instruct"
    
     system_prompt = (
         "You are an expert algorithm designer. Your goal is to discover new, mathematically "
