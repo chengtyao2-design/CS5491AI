@@ -96,6 +96,9 @@ def priority(el: tuple[int, ...], n: int, w: int) -> float:
   1. THINK FIRST: Write a detailed "Thoughts:" section explaining your mathematical strategy. Analyze the distribution of 0s, 1s, and 2s, and consider non-linear combinations.
   2. THEN WRITE CODE: Provide the Python implementation for the function body.
   3. FORMAT: You MUST wrap your code inside a ```python ... ``` block. DO NOT write the function signature (`def priority...`) again, ONLY write the body.
+  4.Try to use modulo arithmetic or parity checks (even/odd) for the elements.
+  5.What if you penalize elements that have identical values in adjacent dimensions?
+  6.Try using a completely random small noise added to the score to break ties!
   """
   return 0.0
 
