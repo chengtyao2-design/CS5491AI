@@ -108,12 +108,24 @@ class LLM:
                 
             raw_content = resp.choices[0].message.content
             
+            # import re
+            # code_match = re.search(r'```python\s*(.*?)\s*```', raw_content, re.DOTALL)
+            # if code_match:
+            #     extracted_code = code_match.group(1)
+            # else:
+            #     code_match_fallback = re.search(r'```\s*(.*?)\s*```', raw_content, re.DOTALL)
+            #     if code_match_fallback:
+            #         extracted_code = code_match_fallback.group(1)
+            #     else:
+            #         # <--- 究极兜底：没代码就返回 0.0，绝不让英文报错
+            #         extracted_code = "  return 0.0"
             import re
-            code_match = re.search(r'```python\s*(.*?)\s*```', raw_content, re.DOTALL)
+            # 使用 \r?\n 只匹配换行符，严禁吃掉首行代码的空格缩进！
+            code_match = re.search(r'```python\r?\n(.*?)```', raw_content, re.DOTALL)
             if code_match:
                 extracted_code = code_match.group(1)
             else:
-                code_match_fallback = re.search(r'```\s*(.*?)\s*```', raw_content, re.DOTALL)
+                code_match_fallback = re.search(r'```\r?\n(.*?)```', raw_content, re.DOTALL)
                 if code_match_fallback:
                     extracted_code = code_match_fallback.group(1)
                 else:
