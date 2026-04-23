@@ -81,11 +81,11 @@ class LLM:
         "You are an expert algorithm designer. Your goal is to discover new, mathematically "
         "innovative heuristic functions to maximize the size of the admissible set.\n"
         "CRITICAL INSTRUCTIONS:\n"
-        "1. FIRST, write a detailed 'Thoughts:' section explaining your mathematical intuition, "
-        "strategy, and how you combine variables.\n"
+        "1. FIRST, write a detailed 'Thoughts:' section.\n"
         "2. THEN, provide the Python implementation inside a ```python ... ``` code block.\n"
         "3. DO NOT repeat the `def priority(...)` signature. Write ONLY the indented function body.\n"
-        "4. Be creative! Use numpy operations, exponential penalties, or non-linear combinations."
+        "4. IMPORTANT FORMATTING: All lines of your code MUST have exactly the same baseline indentation (e.g., exactly 4 spaces). DO NOT mix indentation levels arbitrarily. IndentationError will cause immediate failure!\n"
+        "5. INPUT TYPE: `el` is a `numpy.ndarray`. Use `np.count_nonzero(el == X)`, NEVER use list methods like `.count()`."
     )
     
     user_prompt = f"Please read the following context. Provide your Thoughts, then the new function body.\n\n{prompt}"
