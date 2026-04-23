@@ -119,7 +119,7 @@ class LLM:
             #     else:
             #         # <--- 究极兜底：没代码就返回 0.0，绝不让英文报错
             #         extracted_code = "  return 0.0"
-           import re
+            import re
             
             # 终极正则：匹配 ```，忽略同行内容（不管有没有python或空格），匹配换行，然后提取代码！
             code_match = re.search(r'```[^\n]*\n(.*?)```', raw_content, re.DOTALL)
