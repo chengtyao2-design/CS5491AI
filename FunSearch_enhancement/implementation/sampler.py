@@ -74,7 +74,7 @@ class LLM:
   def _draw_sample(self, prompt: str) -> str:
     """Returns a predicted continuation of `prompt`."""
     # model = os.getenv("LLM_MODEL", "qwen/qwen-2.5-coder-32b-instruct")
-    model = "openai/gpt-4o-mini"
+    model = "openai/gpt-4o"
 
    
     system_prompt = (
