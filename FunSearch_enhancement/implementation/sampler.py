@@ -71,7 +71,7 @@ class LLM:
   #           else:
   #               print("Max retries reached. Stopping execution.")
   #               raise e
- def _draw_sample(self, prompt: str) -> str:
+  def _draw_sample(self, prompt: str) -> str:
     """Returns a predicted continuation of `prompt`."""
     model = "openai/gpt-4o-mini"
     
