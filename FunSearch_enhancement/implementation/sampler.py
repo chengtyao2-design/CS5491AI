@@ -119,18 +119,16 @@ class LLM:
             #     else:
             #         # <--- 究极兜底：没代码就返回 0.0，绝不让英文报错
             #         extracted_code = "  return 0.0"
-            import re
-            # 使用 \r?\n 只匹配换行符，严禁吃掉首行代码的空格缩进！
-            code_match = re.search(r'```python\r?\n(.*?)```', raw_content, re.DOTALL)
+           import re
+            
+            # 终极正则：匹配 ```，忽略同行内容（不管有没有python或空格），匹配换行，然后提取代码！
+            code_match = re.search(r'```[^\n]*\n(.*?)```', raw_content, re.DOTALL)
+            
             if code_match:
                 extracted_code = code_match.group(1)
             else:
-                code_match_fallback = re.search(r'```\r?\n(.*?)```', raw_content, re.DOTALL)
-                if code_match_fallback:
-                    extracted_code = code_match_fallback.group(1)
-                else:
-                    # <--- 究极兜底：没代码就返回 0.0，绝不让英文报错
-                    extracted_code = "  return 0.0"
+                # 终极兜底：如果没有检测到代码块，返回保底得分
+                extracted_code = "  return 0.0"
             
             lines = extracted_code.split('\n')
             final_lines = [line for line in lines if not line.strip().startswith('def priority')]
