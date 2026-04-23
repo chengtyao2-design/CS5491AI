@@ -71,21 +71,19 @@ class LLM:
   #           else:
   #               print("Max retries reached. Stopping execution.")
   #               raise e
-  def _draw_sample(self, prompt: str) -> str:
+ def _draw_sample(self, prompt: str) -> str:
     """Returns a predicted continuation of `prompt`."""
-    # model = os.getenv("LLM_MODEL", "qwen/qwen-2.5-coder-32b-instruct")
-    model = "openai/gpt-4o"
-
-   
+    model = os.getenv("LLM_MODEL", "qwen/qwen-2.5-coder-32b-instruct")
+    
     system_prompt = (
         "You are an expert algorithm designer. Your goal is to discover new, mathematically "
         "innovative heuristic functions to maximize the size of the admissible set.\n"
         "CRITICAL INSTRUCTIONS:\n"
-        "1. FIRST, write a detailed 'Thoughts:' section.\n"
+        "1. FIRST, write a detailed 'Thoughts:' section explaining your mathematical intuition, "
+        "strategy, and how you combine variables.\n"
         "2. THEN, provide the Python implementation inside a ```python ... ``` code block.\n"
         "3. DO NOT repeat the `def priority(...)` signature. Write ONLY the indented function body.\n"
-        "4. IMPORTANT FORMATTING: All lines of your code MUST have exactly the same baseline indentation (e.g., exactly 4 spaces). DO NOT mix indentation levels arbitrarily. IndentationError will cause immediate failure!\n"
-        "5. INPUT TYPE: `el` is a `numpy.ndarray`. Use `np.count_nonzero(el == X)`, NEVER use list methods like `.count()`."
+        "4. Be creative! Use numpy operations, exponential penalties, or non-linear combinations."
     )
     
     user_prompt = f"Please read the following context. Provide your Thoughts, then the new function body.\n\n{prompt}"
@@ -108,27 +106,17 @@ class LLM:
                 
             raw_content = resp.choices[0].message.content
             
-            # import re
-            # code_match = re.search(r'```python\s*(.*?)\s*```', raw_content, re.DOTALL)
-            # if code_match:
-            #     extracted_code = code_match.group(1)
-            # else:
-            #     code_match_fallback = re.search(r'```\s*(.*?)\s*```', raw_content, re.DOTALL)
-            #     if code_match_fallback:
-            #         extracted_code = code_match_fallback.group(1)
-            #     else:
-            #         # <--- 究极兜底：没代码就返回 0.0，绝不让英文报错
-            #         extracted_code = "  return 0.0"
             import re
-            
-            # 终极正则：匹配 ```，忽略同行内容（不管有没有python或空格），匹配换行，然后提取代码！
-            code_match = re.search(r'```[^\n]*\n(.*?)```', raw_content, re.DOTALL)
-            
+            code_match = re.search(r'```python\s*(.*?)\s*```', raw_content, re.DOTALL)
             if code_match:
                 extracted_code = code_match.group(1)
             else:
-                # 终极兜底：如果没有检测到代码块，返回保底得分
-                extracted_code = "  return 0.0"
+                code_match_fallback = re.search(r'```\s*(.*?)\s*```', raw_content, re.DOTALL)
+                if code_match_fallback:
+                    extracted_code = code_match_fallback.group(1)
+                else:
+                    # <--- 究极兜底：没代码就返回 0.0，绝不让英文报错
+                    extracted_code = "  return 0.0"
             
             lines = extracted_code.split('\n')
             final_lines = [line for line in lines if not line.strip().startswith('def priority')]
